@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$/android_app_info" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/bubbleschain" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/flutter_plugin_device_apps" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/supabase-otp-reset-api/nextjs-contentlayer" vcs="Git" />
+  </component>
+</project>
