@@ -1,0 +1,10 @@
+<!-- 404.html for Flutter Web SPA on GitHub Pages -->
+<script>
+    // Recupera o caminho completo da URL acessada
+    var l = window.location;
+    // Extrai apenas o path e query após /bubbleschain
+    var path = l.pathname.split('/bubbleschain')[1] || '/';
+    var search = l.search || '';
+    // Redireciona para o index.html e repassa o path/query como hash
+    window.location.replace('/bubbleschain/#' + path + search);
+</script>
