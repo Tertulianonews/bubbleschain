@@ -1,0 +1,39 @@
+name: cripto_chat
+description: Projeto PEPE Chat multiplataforma com Supabase Auth
+version: 1.0.0
+
+environment:
+  sdk: '^3.8.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.3.3
+  google_fonts: ^6.2.0
+  image_picker: ^1.0.7
+  file_picker: any
+  url_launcher: ^6.2.5
+  any_link_preview: ^3.0.1
+  intl: ^0.19.0
+  youtube_player_flutter: ^9.1.1
+  audioplayers: ^5.2.1
+  app_links: ^3.4.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon_bolhas.png
+    - assets/bubble_pop.mp3
+    - assets/sol_bubble.jpg
+    - assets/grito.mp3
+    - assets/grito2.mp3
+    - assets/plimplim.mp3
+    - assets/gifmaster.gif
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon_bolhas.png"
