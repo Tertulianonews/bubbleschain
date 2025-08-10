@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/pepe_logo.dart';
+import 'login_screen.dart'; // Adicionei este import
 
 class AccountVerifiedScreen extends StatelessWidget {
   const AccountVerifiedScreen({Key? key}) : super(key: key);
@@ -25,10 +26,16 @@ class AccountVerifiedScreen extends StatelessWidget {
             children: [
               const PepeLogo(size: 62),
               SizedBox(height: 16),
+              Icon(Icons.verified,
+                  size: 72,
+                  color: Colors.greenAccent[400]),
+              SizedBox(height: 16),
               Text("Conta verificada!",
-                  style: GoogleFonts.orbitron(fontSize: 23,
+                  style: GoogleFonts.orbitron(
+                      fontSize: 23,
                       color: Color(0xFF185886),
-                      fontWeight: FontWeight.bold)),
+                      fontWeight: FontWeight.bold
+                  )),
               SizedBox(height: 16),
               Text(
                 "Seu e-mail foi confirmado com sucesso.\nAgora você pode acessar todos os recursos do Bubbles Chat.",
@@ -44,8 +51,10 @@ class AccountVerifiedScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(13)),
                     textStyle: GoogleFonts.orbitron(
                         fontWeight: FontWeight.bold, fontSize: 16)),
-                onPressed: () =>
-                    Navigator.of(context).pushReplacementNamed('/'),
+                // Alteração importante aqui:
+                onPressed: () => Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => LoginScreen())
+                ),
                 child: Text("Ir para o login"),
               ),
             ],
