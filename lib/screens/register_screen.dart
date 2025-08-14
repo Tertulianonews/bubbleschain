@@ -111,15 +111,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _showRepeatPassword = false;
 
   Future<void> _register() async {
-    // Esconder o teclado se estiver aberto
-    FocusScope.of(context).unfocus();
-
     setState(() {
       isLoading = true;
       errorMsg = null;
-      infoMsg = null; // Limpa mensagens anteriores
+      infoMsg = null;
     });
-
     if (_pwd.text.trim() != _pwdRepeat.text.trim()) {
       setState(() {
         errorMsg = 'As senhas não coincidem.';
@@ -127,62 +123,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
       return;
     }
-    if (_pwd.text.trim().length < 6) {
+    if (_pwd.text
+        .trim()
+        .length < 6) {
       setState(() {
         errorMsg = 'A senha deve ter no mínimo 6 caracteres.';
         isLoading = false;
       });
       return;
     }
-
     try {
-      // Define a URL para onde o usuário será redirecionado APÓS clicar
-      // no link de confirmação no e-mail.
-      final String emailRedirectUri = 'https://tertulianonews.github.io/bubbleschain/email-confirmado.html';
-
-      // Chama a função de cadastro do Supabase, incluindo o emailRedirectTo
-      final AuthResponse resp = await Supabase.instance.client.auth.signUp(
+      final resp = await Supabase.instance.client.auth.signUp(
         email: _email.text.trim(),
         password: _pwd.text.trim(),
-        emailRedirectTo: emailRedirectUri, // <--- MODIFICAÇÃO IMPORTANTE AQUI
       );
-
-      // A resposta (resp) pode conter informações sobre o usuário e a sessão.
-      // Para o fluxo de signup com confirmação de e-mail, resp.user não será nulo,
-      // mas resp.session será nulo até que o e-mail seja confirmado.
-
-      if (resp.user != null) {
-        setState(() {
-          infoMsg = 'Quase lá! Confira seu e-mail para ativar sua conta.';
-          // Limpar os campos após o sucesso pode ser uma boa prática
-          _email.clear();
-          _pwd.clear();
-          _pwdRepeat.clear();
-        });
-      } else {
-        // Isso seria um caso inesperado para signUp se não houver erro
-        setState(() {
-          errorMsg = 'Ocorreu um problema no cadastro. Tente novamente.';
-        });
-      }
-
-    } on AuthException catch (e) { // É bom ser específico com o tipo de exceção do Supabase
       setState(() {
-        // Você pode querer tratar mensagens de erro específicas do Supabase de forma diferente
-        // e.g., if (e.message.contains('User already registered'))
-        errorMsg = 'Erro no cadastro: ${e.message}';
+        infoMsg = 'Quase lá! Confira seu e-mail para ativar sua conta.';
       });
-    } catch (e) { // Para qualquer outro tipo de erro inesperado
+    } catch (e) {
       setState(() {
-        errorMsg = 'Ocorreu um erro inesperado: $e';
+        errorMsg = 'Erro no cadastro: $e';
       });
-    } finally { // O bloco finally garante que isLoading seja definido como false
-      if (mounted) { // Boa prática verificar se o widget ainda está na árvore
-        setState(() {
-          isLoading = false;
-        });
-      }
     }
+    setState(() {
+      isLoading = false;
+    });
   }
 
   @override

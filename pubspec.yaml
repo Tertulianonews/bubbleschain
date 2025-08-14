@@ -8,6 +8,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  supabase: ^2.4.2
   supabase_flutter: ^2.3.3
   google_fonts: ^6.2.0
   image_picker: ^1.0.7
@@ -16,8 +17,11 @@ dependencies:
   any_link_preview: ^3.0.1
   intl: ^0.19.0
   youtube_player_flutter: ^9.1.1
-  audioplayers: ^5.2.1
+  audioplayers: ^5.0.1
   app_links: ^3.4.1
+  flutter_cube: ^0.1.1
+  rive: ^0.12.4
+  shared_preferences: ^2.2.3
 
 flutter:
   uses-material-design: true
@@ -27,11 +31,25 @@ flutter:
     - assets/sol_bubble.jpg
     - assets/grito.mp3
     - assets/grito2.mp3
-    - assets/plimplim.mp3
+    - assets/assets/plimplim.mp3
     - assets/gifmaster.gif
+    - assets/assets/coletando.mp3
+    - assets/assets/abelha.mp3
+    - assets/assets/risada.mp3
+    - assets/models/character.obj
+    - assets/models/character.mtl
+    - assets/models/cube_blue.obj
+    - assets/models/cube_skin.obj
+    - assets/models/cube_green.obj
+    - assets/models/cube_brown.obj
+    - assets/models/colors.mtl
+    # Diretório para paisagens/tiles (deixe os PNGs aqui)
+    - assets/map/tiles/
 
 dev_dependencies:
   flutter_launcher_icons: ^0.13.1
+  flutter_test:
+    sdk: flutter
 
 flutter_icons:
   android: true

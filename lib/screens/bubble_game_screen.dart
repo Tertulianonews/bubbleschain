@@ -232,7 +232,7 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
       solanaExplosionPos = _lastSolanaCenterPos;
       showSolanaExplosion = true;
     });
-    await _solanaPlayer.play(AssetSource('plimplim.mp3'), volume: 0.92);
+    await _solanaPlayer.play(AssetSource('assets/plimplim.mp3'), volume: 0.92);
     // --- Mega shake
     for (int i = 0; i < 8; i++) {
       Future.delayed(Duration(milliseconds: i * 44), () {
