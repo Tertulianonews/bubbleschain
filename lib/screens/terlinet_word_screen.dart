@@ -50,7 +50,7 @@ _CategoryEmojiSets _getEmojiSetsForCategory(String category) {
   switch (category) {
     case 'deserto':
       return _CategoryEmojiSets(
-        enemyEmojis: ['🌵', '🐍', '☀️', '🦂', '🦎'],
+        enemyEmojis: ['🌵', '🐍', '🦂', '🦎'],
         lakeEmojis: ['🐍', '🦂', '🦎', '🌵'],
       );
     case 'animais':
