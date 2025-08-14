@@ -17,6 +17,7 @@ class _IntroChip extends StatelessWidget {
 
   const _IntroChip({required this.icon, required this.label});
 
+
   @override
   Widget build(BuildContext context) {
     return Chip(
@@ -33,6 +34,7 @@ class _IntroChip extends StatelessWidget {
       elevation: 0,
     );
   }
+
 }
 
 // ====================== EMOJI CATEGORIES ======================
@@ -48,6 +50,21 @@ class _CategoryEmojiSets {
 /// Can be expanded per level!
 _CategoryEmojiSets _getEmojiSetsForCategory(String category) {
   switch (category) {
+    case 'plantas':
+      return _CategoryEmojiSets(
+        // Macacos como inimigos da fase de plantas
+        enemyEmojis: ['🐒', '🦍', '🦧', '🙈', '🙉', '🙊'],
+        // Criaturas/elementos nos lagos com temática de plantas/flores
+        lakeEmojis: ['🪷', '🌸', '🌼', '🌿', '🍃'],
+      );
+    case 'cidade':
+      return _CategoryEmojiSets(
+        enemyEmojis: [
+          '🚗', '🚕', '🚙', '🚓', '🚑', '🚒', '🚐', '🚘', '🚌', '🚍', '🚚', '🚛',
+          '🛻', '🏎️', '🚜'
+        ],
+        lakeEmojis: const ['🚦', '🚥', '🛑'],
+      );
     case 'deserto':
       return _CategoryEmojiSets(
         enemyEmojis: ['🌵', '🐍', '🦂', '🦎'],
@@ -176,6 +193,178 @@ class MaterialProperties {
 }
 
 // ====================== COMPONENTES VISUAIS ======================
+
+// Tubo neon lateral para o prédio TerlineT
+class _NeonTube extends StatelessWidget {
+  final double height;
+
+  const _NeonTube({required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    final int now = DateTime
+        .now()
+        .millisecondsSinceEpoch;
+    final double pulse = (sin(now * 0.006) * 0.7 + 0.8);
+    final Color neonBlue = Colors.cyanAccent;
+    return Container(
+      width: 10,
+      height: height,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            neonBlue.withOpacity(0.96),
+            neonBlue.withOpacity(0.65),
+            neonBlue.withOpacity(0.90),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(5),
+        boxShadow: [
+          BoxShadow(
+            color: neonBlue.withOpacity(0.35 + 0.14 * pulse),
+            blurRadius: 26 + 10 * pulse,
+            spreadRadius: 3 + 2 * pulse,
+          ),
+        ],
+        border: Border.all(
+          color: Colors.white.withOpacity(0.67),
+          width: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+// Letreiro neon lateral animado
+class _SideNeonSign extends StatelessWidget {
+  final double height;
+  final String label;
+
+  const _SideNeonSign({required this.height, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final int now = DateTime
+        .now()
+        .millisecondsSinceEpoch;
+    final double pulse = (sin(now * 0.007) * 0.5 + 0.5);
+    final Color neon = Colors.pinkAccent;
+    return Container(
+      width: 24,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.7), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: neon.withOpacity(0.35 + 0.25 * pulse),
+            blurRadius: 18 + 10 * pulse,
+            spreadRadius: 2 + 2 * pulse,
+          )
+        ],
+      ),
+      alignment: Alignment.center,
+      child: RotatedBox(
+        quarterTurns: 3,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.0,
+            shadows: [
+              Shadow(color: neon.withOpacity(0.9), blurRadius: 10 + 8 * pulse),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Holofote varrendo o céu
+class _SearchLight extends StatelessWidget {
+  final double length;
+  final double baseWidth;
+  final Color color;
+  final double phase; // para alternar o tempo entre holofotes
+
+  const _SearchLight({
+    required this.length,
+    required this.baseWidth,
+    required this.color,
+    required this.phase,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double t = DateTime
+        .now()
+        .millisecondsSinceEpoch * 0.001 + phase;
+    final double angle = sin(t) * 0.45; // varre ~±26°
+    return CustomPaint(
+      size: Size(length, length),
+      painter: _SearchLightPainter(
+        angle: angle,
+        length: length,
+        baseWidth: baseWidth,
+        color: color,
+      ),
+    );
+  }
+}
+
+class _SearchLightPainter extends CustomPainter {
+  final double angle;
+  final double length;
+  final double baseWidth;
+  final Color color;
+
+  _SearchLightPainter({
+    required this.angle,
+    required this.length,
+    required this.baseWidth,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    // Origem no centro inferior do canvas
+    final Offset origin = Offset(size.width * 0.2, size.height * 0.85);
+    canvas.translate(origin.dx, origin.dy);
+    canvas.rotate(angle);
+
+    final Path p = Path()
+      ..moveTo(0, 0)
+      ..lineTo(-baseWidth * 0.5, 0)..lineTo(0, -length)..lineTo(
+          baseWidth * 0.5, 0)
+      ..close();
+
+    final Paint paint = Paint()
+      ..shader = ui.Gradient.linear(
+        const Offset(0, 0),
+        Offset(0, -length),
+        [
+          color.withOpacity(0.22),
+          color.withOpacity(0.08),
+          Colors.transparent,
+        ],
+        [0.0, 0.4, 1.0],
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16)
+      ..blendMode = BlendMode.plus;
+    canvas.drawPath(p, paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _SearchLightPainter oldDelegate) => true;
+}
+
 class CloudWidget extends StatelessWidget {
   final double scale;
 
@@ -237,6 +426,24 @@ class BeeWidget extends StatelessWidget {
         alignment: Alignment.center,
         transform: Matrix4.identity()..scale(facingRight ? 1.0 : -1.0, 1.0),
         child: Text(emoji, style: const TextStyle(fontSize: 28)),
+      ),
+    );
+  }
+}
+
+class CarWidget extends StatelessWidget {
+  final String emoji;
+  final double scale;
+
+  const CarWidget({super.key, required this.emoji, this.scale = 1.0});
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.scale(
+      scale: scale,
+      child: Text(
+        emoji,
+        style: const TextStyle(fontSize: 34),
       ),
     );
   }
@@ -328,6 +535,220 @@ class HillWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+class TerlineTBuilding extends StatelessWidget {
+  final double width;
+  final double height;
+
+  const TerlineTBuilding({super.key, this.width = 180, this.height = 260});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        children: [
+          // Corpo principal do prédio
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF2B3A55),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black54,
+                      blurRadius: 10,
+                      offset: Offset(0, 6)),
+                ],
+              ),
+            ),
+          ),
+          // Faixa luminosa
+          Positioned(
+            left: 10,
+            right: 10,
+            top: height * 0.18,
+            child: Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.cyanAccent.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          // Placa neon com o nome (pulsante)
+          Positioned(
+            left: width * 0.10,
+            right: width * 0.10,
+            top: 10,
+            child: Builder(
+              builder: (_) {
+                final int now = DateTime
+                    .now()
+                    .millisecondsSinceEpoch;
+                final double pulse = (sin(now * 0.007) * 0.5 + 0.5);
+                final Color neonCyan = Colors.cyanAccent;
+                final Color neonMagenta = Colors.pinkAccent;
+                return Container(
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [neonCyan, neonMagenta],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.9),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: neonCyan.withOpacity(0.55 + 0.25 * pulse),
+                        blurRadius: 18 + 12 * pulse,
+                        spreadRadius: 2 + 2 * pulse,
+                      ),
+                      BoxShadow(
+                        color: neonMagenta.withOpacity(0.45 + 0.25 * pulse),
+                        blurRadius: 26 + 12 * pulse,
+                        spreadRadius: 2 + 2 * pulse,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    'TerlineT AI',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                      shadows: [
+                        Shadow(
+                          color: neonCyan.withOpacity(0.8),
+                          blurRadius: 12 + 8 * pulse,
+                        ),
+                        Shadow(
+                          color: neonMagenta.withOpacity(0.6),
+                          blurRadius: 16 + 8 * pulse,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // Tubos neon laterais
+          Positioned(
+            left: 6,
+            top: height * 0.22,
+            child: _NeonTube(height: height * 0.62),
+          ),
+          Positioned(
+            right: 6,
+            top: height * 0.22,
+            child: _NeonTube(height: height * 0.62),
+          ),
+          // Letreiro lateral neon
+          Positioned(
+            right: -28,
+            top: height * 0.35,
+            child: _SideNeonSign(height: height * 0.40, label: 'AI'),
+          ),
+          // Janelas
+          ..._buildWindows(),
+        ],
+      ),
+    );
+  }
+
+  // Gera uma grade simples de janelas iluminadas
+  List<Widget> _buildWindows() {
+    final List<Widget> children = [];
+    const double leftPad = 12;
+    const double topPad = 40;
+    const double colGap = 10;
+    const double rowGap = 12;
+    const double winW = 14;
+    const double winH = 18;
+    final int cols = ((width - leftPad * 2) / (winW + colGap)).floor();
+    final int rows = ((height - topPad - 10) / (winH + rowGap)).floor();
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        final double x = leftPad + c * (winW + colGap);
+        final double y = topPad + r * (winH + rowGap);
+        final bool lit = ((r + c) % 3) != 0;
+        children.add(Positioned(
+          left: x,
+          top: y,
+          child: Container(
+            width: winW,
+            height: winH,
+            decoration: BoxDecoration(
+              color: lit ? const Color(0xFFFFF59D) : const Color(0xFF304A6B),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ));
+      }
+    }
+    return children;
+  }
+}
+
+// Helper: árvore grande para fundo da fase Plantas
+Widget _buildTree(double width, double height, Color trunkColor,
+    Color canopyColor) {
+  final double trunkWidth = width * 0.16;
+  final double trunkHeight = height * 0.45;
+  final double canopyHeight = height * 0.62;
+  return SizedBox(
+    width: width,
+    height: height,
+    child: Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        Positioned(
+          bottom: 0,
+          child: Container(
+            width: trunkWidth,
+            height: trunkHeight,
+            decoration: BoxDecoration(
+              color: trunkColor,
+              borderRadius: BorderRadius.circular(trunkWidth * 0.25),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: trunkHeight - canopyHeight * 0.25,
+          child: Container(
+            width: width * 0.90,
+            height: canopyHeight,
+            decoration: BoxDecoration(
+              color: canopyColor,
+              borderRadius: BorderRadius.circular(width),
+              boxShadow: [
+                BoxShadow(
+                  color: canopyColor.withOpacity(0.35),
+                  blurRadius: 18,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ====================== PARTÍCULAS E EFEITOS ======================
@@ -778,6 +1199,33 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       skyTop: const Color(0xFFF6D365),
       skyBottom: const Color(0xFFECC07C),
     ),
+    LevelConfig(
+      name: 'Fase 4 — Cidade Neon',
+      emojiCategory: 'cidade',
+      worldLength: 8200,
+      worldDepth: 1600,
+      maxHeight: 260,
+      groundY: 460,
+      coinCount: 95,
+      beeCount: 0,
+      wallCount: 0,
+      skyTop: const Color(0xFF1F2A44),
+      skyBottom: const Color(0xFF384B78),
+    ),
+    // Fase 5 — Plantas e Flores
+    LevelConfig(
+      name: 'Fase 5 — Floresta das Plantas',
+      emojiCategory: 'plantas',
+      worldLength: 7600,
+      worldDepth: 1500,
+      maxHeight: 280,
+      groundY: 440,
+      coinCount: 90,
+      beeCount: 18,
+      wallCount: 12,
+      skyTop: const Color(0xFF4CAF50),
+      skyBottom: const Color(0xFF2E7D32),
+    ),
   ];
   late LevelConfig currentLevel;
   int levelIndex = 0;
@@ -785,9 +1233,17 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   // Elementos visuais
   final List<_Cloud> clouds = [];
   final List<_Bee> bees = [];
+  final List<_Car> _cars = [];
+  final List<_Log> _logs = [];
   final List<_Dust> dusts = [];
   final List<_Sparkle> sparkles = [];
   final ParticleSystem _particleSystem = ParticleSystem();
+  final List<_CityBuilding> _cityBuildingsFar = [];
+  final List<_CityBuilding> _cityBuildingsNear = [];
+  final List<_BigTree> _treesFar = [];
+  final List<_BigTree> _treesNear = [];
+  double _carSpawnTimer = 0.0;
+  final List<double> _terlineTBuildingXs = [];
 
   // Controles
   bool kLeft = false, kRight = false, kJumpHeld = false, kSprint = false;
@@ -954,28 +1410,38 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     platforms.clear();
     clouds.clear();
     bees.clear();
+    _cars.clear();
+    _logs.clear();
     dusts.clear();
     sparkles.clear();
     _lakeCreatures.clear();
+    _cityBuildingsFar.clear();
+    _cityBuildingsNear.clear();
+    _treesFar.clear();
+    _treesNear.clear();
+    _carSpawnTimer = 0.0;
+    _terlineTBuildingXs.clear();
 
-    // Gerar buracos no solo (segmentos sem plataforma)
+    // Gerar buracos no solo (segmentos sem plataforma) — não gerar na cidade
     _holes.clear();
     final Random random = Random();
-    final int numHoles = (currentLevel.wallCount).clamp(4, 14);
-    for (int i = 0; i < numHoles; i++) {
-      final double holeWidth = (BLOCK_SIZE * (3 + random.nextInt(4)))
-          .toDouble(); // 3..6 blocos
-      final double minX = 220.0;
-      final double maxX = worldLength - 220.0 - holeWidth;
-      if (maxX <= minX) break;
-      final double start = minX + random.nextDouble() * (maxX - minX);
-      final _HoleSegment candidate = _HoleSegment(
-          startX: start, endX: start + holeWidth);
-      // Evitar sobreposição forte com outros buracos
-      bool overlaps = _holes.any((h) =>
-          candidate.overlaps(h, minGap: BLOCK_SIZE * 2));
-      if (!overlaps) {
-        _holes.add(candidate);
+    if (currentLevel.emojiCategory != 'cidade') {
+      final int numHoles = (currentLevel.wallCount).clamp(4, 14);
+      for (int i = 0; i < numHoles; i++) {
+        final double holeWidth = (BLOCK_SIZE * (3 + random.nextInt(4)))
+            .toDouble(); // 3..6 blocos
+        final double minX = 220.0;
+        final double maxX = worldLength - 220.0 - holeWidth;
+        if (maxX <= minX) break;
+        final double start = minX + random.nextDouble() * (maxX - minX);
+        final _HoleSegment candidate = _HoleSegment(
+            startX: start, endX: start + holeWidth);
+        // Evitar sobreposição forte com outros buracos
+        bool overlaps = _holes.any((h) =>
+            candidate.overlaps(h, minGap: BLOCK_SIZE * 2));
+        if (!overlaps) {
+          _holes.add(candidate);
+        }
       }
     }
 
@@ -994,8 +1460,9 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     final _CategoryEmojiSets sets = _getEmojiSetsForCategory(
         currentLevel.emojiCategory);
 
-    // Criar criaturas nos lagos (buracos) – não criar na fase deserto
-    if (currentLevel.emojiCategory != 'deserto') {
+    // Criar criaturas nos lagos (buracos) – não criar no deserto nem na cidade
+    if (currentLevel.emojiCategory != 'deserto' &&
+        currentLevel.emojiCategory != 'cidade') {
       for (final h in _holes) {
         final double width = h.endX - h.startX;
         final int count = 2 + Random().nextInt(2); // 2..3 criaturas por lago
@@ -1036,20 +1503,119 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       ));
     }
 
-    // Gerar inimigos flutuantes (emojis da categoria)
-    for (int i = 0; i < currentLevel.beeCount; i++) {
-      final double bx = 400 + random.nextDouble() * (worldLength - 800);
-      final double by = groundY - (70 + random.nextDouble() * 160);
-      bees.add(_Bee(
-        x: bx,
-        baseY: by,
-        amp: 16 + random.nextDouble() * 22,
-        speed: 1.0 + random.nextDouble() * 1.6,
-        dir: random.nextBool() ? 1.0 : -1.0,
-        phase: random.nextDouble() * 6.283,
-        emoji: sets.enemyEmojis[Random().nextInt(sets.enemyEmojis.length)],
-        currentY: by,
-      ));
+    // Gerar inimigos flutuantes (emojis da categoria) — não na cidade
+    if (currentLevel.emojiCategory != 'cidade') {
+      for (int i = 0; i < currentLevel.beeCount; i++) {
+        final double bx = 400 + random.nextDouble() * (worldLength - 800);
+        final double by = groundY - (70 + random.nextDouble() * 160);
+        bees.add(_Bee(
+          x: bx,
+          baseY: by,
+          amp: 16 + random.nextDouble() * 22,
+          speed: 1.0 + random.nextDouble() * 1.6,
+          dir: random.nextBool() ? 1.0 : -1.0,
+          phase: random.nextDouble() * 6.283,
+          emoji: sets.enemyEmojis[Random().nextInt(sets.enemyEmojis.length)],
+          currentY: by,
+        ));
+      }
+    }
+
+    // Fase Plantas: gerar troncos no solo e árvores grandes no fundo
+    if (currentLevel.emojiCategory == 'plantas') {
+      // Troncos (obstáculos no solo)
+      final int numLogs = currentLevel.wallCount.clamp(8, 18);
+      for (int i = 0; i < numLogs; i++) {
+        final double w = 28 + random.nextDouble() * 36; // largura 28..64
+        final double h = 34 + random.nextDouble() * 26; // altura 34..60
+        final double minX = 220.0;
+        final double maxX = worldLength - 220.0 - w;
+        if (maxX <= minX) break;
+        final double x = minX + random.nextDouble() * (maxX - minX);
+        // Evitar colocar troncos dentro de buracos/lagos e longe de outros troncos
+        final bool inHole = _holes.any((hSeg) =>
+        (x + w) > hSeg.startX && x < hSeg.endX);
+        if (inHole) {
+          // tenta uma alternativa simples
+          continue;
+        }
+        bool overlapsOther = _logs.any((l) =>
+        (x + w + BLOCK_SIZE) > l.x && (x - BLOCK_SIZE) < (l.x + l.width));
+        if (overlapsOther) {
+          continue;
+        }
+        _logs.add(_Log(x: x, width: w, height: h, yTop: groundY - h));
+      }
+
+      // Árvores grandes (duas camadas parallax)
+      double xFar = -200;
+      while (xFar < worldLength + 800) {
+        final double w = 140 + random.nextDouble() * 140;
+        final double h = 260 + random.nextDouble() * 220;
+        _treesFar.add(_BigTree(
+          x: xFar,
+          width: w,
+          height: h,
+          trunkColor: const Color(0xFF6D4C41).withOpacity(0.9),
+          canopyColor: Color.lerp(
+              const Color(0xFF2E7D32), const Color(0xFF66BB6A),
+              random.nextDouble())!,
+        ));
+        xFar += w + 140 + random.nextDouble() * 120;
+      }
+      double xNear = -200;
+      while (xNear < worldLength + 800) {
+        final double w = 160 + random.nextDouble() * 180;
+        final double h = 320 + random.nextDouble() * 280;
+        _treesNear.add(_BigTree(
+          x: xNear,
+          width: w,
+          height: h,
+          trunkColor: const Color(0xFF5D4037),
+          canopyColor: Color.lerp(
+              const Color(0xFF1B5E20), const Color(0xFF43A047),
+              random.nextDouble())!,
+        ));
+        xNear += w + 160 + random.nextDouble() * 140;
+      }
+    }
+
+    // Gerar prédios da cidade (camadas parallax)
+    if (currentLevel.emojiCategory == 'cidade') {
+      // Longe
+      double xFar = -200;
+      while (xFar < worldLength + 800) {
+        final double w = 100 + random.nextDouble() * 160;
+        final double h = 100 + random.nextDouble() * 220;
+        _cityBuildingsFar.add(_CityBuilding(
+          x: xFar,
+          width: w,
+          height: h,
+          color: Color.lerp(const Color(0xFF263238), const Color(0xFF455A64),
+              random.nextDouble())!,
+        ));
+        xFar += w + 60 + random.nextDouble() * 80;
+      }
+      // Perto
+      double xNear = -200;
+      while (xNear < worldLength + 800) {
+        final double w = 120 + random.nextDouble() * 180;
+        final double h = 140 + random.nextDouble() * 260;
+        _cityBuildingsNear.add(_CityBuilding(
+          x: xNear,
+          width: w,
+          height: h,
+          color: Color.lerp(const Color(0xFF37474F), const Color(0xFF546E7A),
+              random.nextDouble())!,
+        ));
+        xNear += w + 80 + random.nextDouble() * 90;
+      }
+      // Posições especiais para o prédio TerlineT ao longo da cidade
+      double tx = 800;
+      while (tx < worldLength - 600) {
+        _terlineTBuildingXs.add(tx);
+        tx += 1600; // repete a cada ~1600px
+      }
     }
     _lastGroundY = groundY;
   }
@@ -1234,6 +1800,30 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       }
     }
 
+    // Cidade: colisão com carros => morte (tem que pular por cima sem tocar)
+    if (!isGameOver && currentLevel.emojiCategory == 'cidade') {
+      for (final car in _cars) {
+        if (playerRect.overlaps(car.rect)) {
+          _laughPlayer.stop();
+          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _gameOver();
+          break;
+        }
+      }
+    }
+
+    // Plantas: colisão com troncos => morte (precisa pular por cima)
+    if (!isGameOver && currentLevel.emojiCategory == 'plantas') {
+      for (final log in _logs) {
+        if (playerRect.overlaps(log.rect)) {
+          _laughPlayer.stop();
+          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _gameOver();
+          break;
+        }
+      }
+    }
+
     // Verificar morte por água (lagos)
     if (!isGameOver) {
       final double playerLeft = playerRect.left;
@@ -1352,6 +1942,42 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     // Atualizar partículas
     _particleSystem.update(dt);
 
+    // Cidade: spawn e movimento de carros
+    if (currentLevel.emojiCategory == 'cidade') {
+      // Atualiza posição dos carros existentes
+      _cars.removeWhere((c) => c.x < cameraOffset - 200);
+      for (final car in _cars) {
+        car.x -= car.speed;
+        // Atualiza a posição vertical caso o solo tenha mudado
+        car.yTop = groundY - car.height;
+      }
+
+      // Spawn controlado por tempo
+      _carSpawnTimer += dt;
+      final view = WidgetsBinding.instance.platformDispatcher.views.first;
+      final double screenW = view.physicalSize.width / view.devicePixelRatio;
+      final double interval = (kSprint ? 0.9 : 1.3) +
+          Random().nextDouble() * 0.6;
+      if (_carSpawnTimer >= interval) {
+        _carSpawnTimer = 0.0;
+        final _CategoryEmojiSets citySets = _getEmojiSetsForCategory('cidade');
+        final String emoji = citySets.enemyEmojis[
+        Random().nextInt(citySets.enemyEmojis.length)
+        ];
+        final double spawnX = cameraOffset + screenW + 120 +
+            Random().nextDouble() * 240;
+        final double speed = 3.2 + Random().nextDouble() * 3.6;
+        _cars.add(_Car(
+          x: spawnX,
+          yTop: groundY - 26,
+          width: 40,
+          height: 26,
+          speed: speed,
+          emoji: emoji,
+        ));
+      }
+    }
+
     // Poeira contínua ao correr no deserto
     if (currentLevel.emojiCategory == 'deserto' && _onGround &&
         playerVelocityX.abs() > 1.5) {
@@ -1419,6 +2045,10 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   void _restartGame() {
     setState(() {
       _resetGame();
+      // Ajusta o solo conforme a altura lógica atual (orientação/landscape)
+      final view = WidgetsBinding.instance.platformDispatcher.views.first;
+      final double logicalH = view.physicalSize.height / view.devicePixelRatio;
+      _applyResponsiveGround(logicalH);
       _startGame();
     });
   }
@@ -1449,6 +2079,11 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
         currentLevel = levels[levelIndex];
         _applyLevel(currentLevel);
         _resetGame();
+        // Garante ajuste do solo para a altura atual da tela
+        final view = WidgetsBinding.instance.platformDispatcher.views.first;
+        final double logicalH = view.physicalSize.height /
+            view.devicePixelRatio;
+        _applyResponsiveGround(logicalH);
         // não iniciamos aqui; a intro cuida de começar no botão Play
       });
     }
@@ -1651,6 +2286,11 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final bool isDesert = currentLevel.emojiCategory == 'deserto';
+    final bool isCity = currentLevel.emojiCategory == 'cidade';
+    final bool isPlants = currentLevel.emojiCategory == 'plantas';
+    // Dimensões destacadas para o prédio TerlineT AI (maior e mais largo)
+    const double terlineTWidth = 320;
+    const double terlineTHeight = 380;
 
     return Scaffold(
       body: RawKeyboardListener(
@@ -1703,7 +2343,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                 ),
               ),
             // Colinas distantes
-            if (!isDesert && (_hasHillsV02 || _hasHillsV01))
+            if (!isDesert && !isCity && (_hasHillsV02 || _hasHillsV01))
               Positioned(
                 left: -cameraOffset * 0.10,
                 top: groundY - 268,
@@ -1726,7 +2366,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                 ),
               ),
             // Colinas próximas (se tivermos as duas variantes, usamos a outra camada)
-            if (!isDesert && _hasHillsV02 && _hasHillsV01)
+            if (!isDesert && !isCity && _hasHillsV02 && _hasHillsV01)
               Positioned(
                 left: -cameraOffset * 0.18,
                 top: groundY - 218,
@@ -1757,6 +2397,95 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                   child: const CloudWidget(),
                 ),
               ),
+
+            // Árvores grandes no plano de fundo (fase Plantas)
+            if (isPlants) ...[
+              // Camada distante de árvores
+              for (final t in _treesFar)
+                Positioned(
+                  left: t.x - cameraOffset * 0.10,
+                  top: groundY - t.height - 120,
+                  child: _buildTree(
+                      t.width, t.height, t.trunkColor.withOpacity(0.9),
+                      t.canopyColor.withOpacity(0.9)),
+                ),
+              // Camada próxima de árvores
+              for (final t in _treesNear)
+                Positioned(
+                  left: t.x - cameraOffset * 0.18,
+                  top: groundY - t.height - 40,
+                  child: _buildTree(
+                      t.width, t.height, t.trunkColor, t.canopyColor),
+                ),
+            ],
+
+            // Holofotes varrendo o céu (atrás dos prédios)
+            if (isCity)
+              for (final tx in _terlineTBuildingXs) ...[
+                Positioned(
+                  left: (tx - 20) - cameraOffset * 0.10,
+                  top: groundY - 380 - 200,
+                  child: IgnorePointer(
+                    child: _SearchLight(
+                      length: 320,
+                      baseWidth: 90,
+                      color: Colors.yellowAccent,
+                      phase: tx * 0.0003,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: (tx + 80) - cameraOffset * 0.10,
+                  top: groundY - 380 - 200,
+                  child: IgnorePointer(
+                    child: _SearchLight(
+                      length: 300,
+                      baseWidth: 80,
+                      color: Colors.cyanAccent,
+                      phase: 1.2 + tx * 0.00037,
+                    ),
+                  ),
+                ),
+              ],
+
+            // Skyline da cidade (prédios em duas camadas + prédio TerlineT)
+            if (isCity) ...[
+              // Camada distante
+              for (final b in _cityBuildingsFar)
+                Positioned(
+                  left: b.x - cameraOffset * 0.08,
+                  top: groundY - b.height - 80,
+                  child: Container(
+                    width: b.width,
+                    height: b.height,
+                    decoration: BoxDecoration(
+                      color: b.color.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              // Camada próxima
+              for (final b in _cityBuildingsNear)
+                Positioned(
+                  left: b.x - cameraOffset * 0.14,
+                  top: groundY - b.height - 30,
+                  child: Container(
+                    width: b.width,
+                    height: b.height,
+                    decoration: BoxDecoration(
+                      color: b.color,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+    // Renderiza prédios TerlineT na camada próxima do skyline (maiores)
+              for (final tx in _terlineTBuildingXs)
+                Positioned(
+                  left: tx - cameraOffset * 0.14,
+    top: groundY - terlineTHeight,
+    child: TerlineTBuilding(width: terlineTWidth, height: terlineTHeight),
+                ),
+            ],
 
             // Dunas (parallax) quando deserto
             if (isDesert)
@@ -1801,6 +2530,15 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                       Color(0xFFDAB77E), // areia média
                     ],
                   )
+                      : (isCity
+                      ? const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF424242),
+                      Color(0xFF212121),
+                    ],
+                  )
                       : LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -1808,44 +2546,69 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                       Colors.green.shade600,
                       Colors.green.shade800,
                     ],
-                  ),
+                  )),
                 ),
               ),
             ),
-            // Lagos (água nos buracos) - desenhar antes das plataformas
-            for (final h in _holes)
-              Positioned(
-                left: h.startX - cameraOffset,
-                top: groundY,
-                child: Container(
-                  width: (h.endX - h.startX),
-                  height: MediaQuery
-                      .of(context)
-                      .size
-                      .height - groundY,
-                  decoration: BoxDecoration(
-                    gradient: isDesert
-                        ? const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFFE6C78E), // areia do topo
-                        Color(0xFFC9A56A), // areia mais funda
-                      ],
-                    )
-                        : LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.blueAccent.withOpacity(0.75),
-                        Color(0xFF303F9F).withOpacity(0.9),
-                      ],
+            // Faixas da pista (tracejadas) para cidade
+            if (isCity)
+              ...[
+                for (double x = 0; x < worldLength; x += 60)
+                  Positioned(
+                    left: x - cameraOffset,
+                    top: groundY + 26,
+                    child: Container(
+                      width: 32,
+                      height: 4,
+                      color: Colors.amberAccent.withOpacity(0.9),
+                    ),
+                  ),
+                for (double x = 30; x < worldLength; x += 60)
+                  Positioned(
+                    left: x - cameraOffset,
+                    top: groundY + 58,
+                    child: Container(
+                      width: 32,
+                      height: 4,
+                      color: Colors.amberAccent.withOpacity(0.9),
+                    ),
+                  ),
+              ],
+            // Lagos (água nos buracos) - desenhar antes das plataformas (não na cidade)
+            if (!isCity)
+              for (final h in _holes)
+                Positioned(
+                  left: h.startX - cameraOffset,
+                  top: groundY,
+                  child: Container(
+                    width: (h.endX - h.startX),
+                    height: MediaQuery
+                        .of(context)
+                        .size
+                        .height - groundY,
+                    decoration: BoxDecoration(
+                      gradient: isDesert
+                          ? const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFFE6C78E), // areia do topo
+                          Color(0xFFC9A56A), // areia mais funda
+                        ],
+                      )
+                          : LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.blueAccent.withOpacity(0.75),
+                          Color(0xFF303F9F).withOpacity(0.9),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
             // Superfície da água (linha mais clara)
-            if (!isDesert)
+            if (!isDesert && !isCity)
               for (final h in _holes)
                 Positioned(
                   left: h.startX - cameraOffset,
@@ -1867,32 +2630,72 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                   ),
                 ),
 
-            // Criaturas dos lagos (emojis boiando)
-            for (final c in _lakeCreatures)
-              Positioned(
-                left: c.x - cameraOffset - 14,
-                top: (c.baseY + sin(nowMs * 0.004 + c.phase) * c.amp) - 14,
-                child: Transform.scale(
-                  scale: c.scale,
-                  child: Text(c.emoji, style: const TextStyle(fontSize: 28)),
-                ),
-              ),
-
-            // Plataformas
-            for (final platform in platforms)
-              if ((platform.right - cameraOffset) > -50 &&
-                  (platform.left - cameraOffset) < screenWidth + 50)
+            // Criaturas dos lagos (emojis boiando) — não na cidade
+            if (!isCity)
+              for (final c in _lakeCreatures)
                 Positioned(
-                  left: platform.left - cameraOffset,
-                  top: platform.top,
+                  left: c.x - cameraOffset - 14,
+                  top: (c.baseY + sin(nowMs * 0.004 + c.phase) * c.amp) - 14,
+                  child: Transform.scale(
+                    scale: c.scale,
+                    child: Text(c.emoji, style: const TextStyle(fontSize: 28)),
+                  ),
+                ),
+
+            // Plataformas (não desenhar na cidade; mantidas para colisão)
+            if (!isCity)
+              for (final platform in platforms)
+                if ((platform.right - cameraOffset) > -50 &&
+                    (platform.left - cameraOffset) < screenWidth + 50)
+                  Positioned(
+                    left: platform.left - cameraOffset,
+                    top: platform.top,
+                    child: Container(
+                      width: platform.width,
+                      height: platform.height,
+                      decoration: BoxDecoration(
+                        color: isDesert
+                            ? const Color(0xFFD2B48C) // areia/terra
+                            : Colors.green.shade700,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+
+            // Troncos (obstáculos da fase Plantas)
+            if (isPlants)
+              for (final log in _logs)
+                Positioned(
+                  left: log.x - cameraOffset,
+                  top: log.yTop,
                   child: Container(
-                    width: platform.width,
-                    height: platform.height,
+                    width: log.width,
+                    height: log.height,
                     decoration: BoxDecoration(
-                      color: isDesert
-                          ? const Color(0xFFD2B48C) // areia/terra
-                          : Colors.green.shade700,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFFA1887F), Color(0xFF6D4C41)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.brown.shade200.withOpacity(0.8),
+                          borderRadius: const BorderRadius.vertical(top: Radius
+                              .circular(6)),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1936,6 +2739,15 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                 child: BeeWidget(
                     scale: 1.0, facingRight: b.dir >= 0, emoji: b.emoji),
               ),
+
+            // Carros da cidade
+            if (isCity)
+              for (final car in _cars)
+                Positioned(
+                  left: car.x - cameraOffset,
+                  top: car.yTop,
+                  child: CarWidget(emoji: car.emoji, scale: 1.0),
+                ),
 
             // Personagem
             Positioned(
@@ -2425,6 +3237,12 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                     currentLevel = levels[levelIndex];
                     _applyLevel(currentLevel);
                     _resetGame();
+                    // Ajusta o solo para a orientação atual
+                    final view = WidgetsBinding.instance.platformDispatcher
+                        .views.first;
+                    final double logicalH = view.physicalSize.height /
+                        view.devicePixelRatio;
+                    _applyResponsiveGround(logicalH);
                     _startGame();
                   });
                 },
@@ -2464,6 +3282,12 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                     isLevelComplete = false;
                     _applyLevel(currentLevel);
                     _resetGame();
+                    // Ajusta o solo para a orientação atual
+                    final view = WidgetsBinding.instance.platformDispatcher
+                        .views.first;
+                    final double logicalH = view.physicalSize.height /
+                        view.devicePixelRatio;
+                    _applyResponsiveGround(logicalH);
                     _startGame();
                   });
                 },
@@ -2558,6 +3382,14 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       for (final b in bees) {
         b.baseY += delta;
       }
+      // Ajustar carros da cidade
+      for (int i = 0; i < _cars.length; i++) {
+        _cars[i].yTop = groundY - _cars[i].height;
+      }
+      // Ajustar troncos da fase Plantas
+      for (int i = 0; i < _logs.length; i++) {
+        _logs[i].yTop = groundY - _logs[i].height;
+      }
       // Ajustar criaturas dos lagos
       for (int i = 0; i < _lakeCreatures.length; i++) {
         _lakeCreatures[i].baseY += delta;
@@ -2645,6 +3477,38 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
 }
 
 // ====================== CLASSES AUXILIARES ======================
+
+class _Log {
+  double x;
+  double width;
+  double height;
+  double yTop;
+
+  _Log({
+    required this.x,
+    required this.width,
+    required this.height,
+    required this.yTop,
+  });
+
+  Rect get rect => Rect.fromLTWH(x, yTop, width, height);
+}
+
+class _BigTree {
+  double x;
+  double width;
+  double height;
+  Color trunkColor;
+  Color canopyColor;
+
+  _BigTree({
+    required this.x,
+    required this.width,
+    required this.height,
+    required this.trunkColor,
+    required this.canopyColor,
+  });
+}
 
 class _HoleSegment {
   final double startX;
@@ -2770,5 +3634,40 @@ class _IntroFloater {
     required this.scale,
     required this.emoji,
     required this.opacity,
+  });
+}
+
+// ====================== CIDADE: CARROS E PRÉDIOS ======================
+class _Car {
+  double x;
+  double yTop;
+  double width;
+  double height;
+  double speed;
+  String emoji;
+
+  _Car({
+    required this.x,
+    required this.yTop,
+    this.width = 40,
+    this.height = 26,
+    required this.speed,
+    required this.emoji,
+  });
+
+  Rect get rect => Rect.fromLTWH(x, yTop, width, height);
+}
+
+class _CityBuilding {
+  double x;
+  double width;
+  double height;
+  Color color;
+
+  _CityBuilding({
+    required this.x,
+    required this.width,
+    required this.height,
+    required this.color,
   });
 }
