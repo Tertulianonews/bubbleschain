@@ -1,9 +1,6 @@
 import 'dart:math';
 import 'dart:ui' as ui;
-<<<<<<< HEAD
 import 'dart:typed_data';
-=======
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 import 'package:flutter/material.dart';
 import 'profile_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,11 +8,7 @@ import 'chat_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'bubble_game_screen.dart';
 import 'package:http/http.dart' as http;
-<<<<<<< HEAD
 import 'terlinet_word_screen.dart'; // Importação adicionada
-=======
-import 'terlinet_word_screen.dart';
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 
 class UserBubble {
   final String id;
@@ -724,17 +717,10 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                         final bool isSpecial = bubble.id == 'game_bubble' ||
                             bubble.id == 'terlinet_word';
                         double baseSize = isSpecial ? 60.0 : bubble.size;
-<<<<<<< HEAD
                         bool isSearchedForThisBubble = isSearching &&
                             bubblesFiltered.isNotEmpty &&
                             bubblesFiltered.first.id == bubble.id;
                         if (isSpecial) isSearchedForThisBubble = false;
-=======
-
-                        bool isSearchedForThisBubble = isSearching &&
-                            bubblesFiltered.isNotEmpty &&
-                            bubblesFiltered.first.id == bubble.id;
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 
                         double drawSize = isSpecial
                             ? baseSize * 1.18
@@ -858,21 +844,11 @@ class BubblesPainter extends CustomPainter {
         final List<Color> neonColors = [
           Colors.blueAccent, Colors.cyanAccent, Colors.limeAccent, Colors.greenAccent,
         ];
-<<<<<<< HEAD
-=======
-        final List<Color> silverColors = [
-          const Color(0xFF2C2C2C), // dark
-          const Color(0xFF8A8A8A), // mid
-          const Color(0xFFEDEDED), // bright highlight
-          const Color(0xFF5A5A5A), // dark-mid
-        ];
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
         final double anim = (DateTime.now().millisecondsSinceEpoch % 2000) / 2000.0;
         final sweep = 6.283 * anim;
         final Rect gameRect = Rect.fromCircle(
             center: Offset(left + drawSize / 2, top + drawSize / 2),
             radius: drawSize / 2);
-<<<<<<< HEAD
         final Paint gradPaint = Paint()
           ..shader = SweepGradient(
             center: FractionalOffset.center,
@@ -885,42 +861,15 @@ class BubblesPainter extends CustomPainter {
           ..strokeWidth = drawSize * 0.08;
         // Desenha o anel apenas se NÃO for a bolha terlinet_word
         if (bubble.id != 'terlinet_word') {
-=======
-        final bool isDroid = false;
-        if (bubble.id == 'game_bubble') {
-          final Paint gradPaint = Paint()
-            ..shader = SweepGradient(
-              center: FractionalOffset.center,
-              colors: neonColors,
-              stops: const [0.0, 0.25, 0.6, 1.0],
-              startAngle: sweep,
-              endAngle: sweep + 6.283,
-            ).createShader(gameRect)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = drawSize * 0.08;
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
           canvas.drawCircle(
               Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
               gradPaint);
         }
-<<<<<<< HEAD
 
         final Paint glowPaint = Paint()
           ..color = Colors.cyanAccent.withOpacity(
               (0.35 + 0.25 * (0.5 + 0.5 * sin(anim * 6.283))) * opacity)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-=======
-        final double auraAnim = 0.5 + 0.5 * sin(anim * 6.283);
-        final Color auraColor = Colors.cyanAccent;
-        final double auraBase = 0.35;
-        final double auraAmp = 0.25;
-        final double auraOpacity = (auraBase + auraAmp * auraAnim) * opacity;
-        final double auraBlur = 16;
-        final Paint glowPaint = Paint()
-          ..color = auraColor.withOpacity(auraOpacity)
-          ..maskFilter = MaskFilter.blur(
-              BlurStyle.normal, auraBlur);
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
         canvas.drawCircle(
             Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 7,
             glowPaint);
@@ -956,15 +905,9 @@ class BubblesPainter extends CustomPainter {
             style: TextStyle(
               fontFamily: 'RobotoMono',
               fontWeight: FontWeight.w900,
-<<<<<<< HEAD
               fontSize: drawSize * (label == 'GAME' ? 0.31 : 0.27),
               color: Colors.white.withOpacity(opacity),
               letterSpacing: label == 'GAME' ? 3.1 : 2.0,
-=======
-              fontSize: drawSize * (label == 'GAME' ? 0.31 : 0.26),
-              color: Colors.white.withOpacity(opacity),
-              letterSpacing: label == 'GAME' ? 3.1 : 1.8,
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
               shadows: [
                 Shadow(
                   blurRadius: 10,
@@ -984,10 +927,6 @@ class BubblesPainter extends CustomPainter {
         final double ty = top + (drawSize - textPainter.height) / 2;
         textPainter.paint(canvas, Offset(tx, ty));
         if (bubble.id == 'terlinet_word') {
-<<<<<<< HEAD
-=======
-          final bool isWord = true;
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
           final int np = 36; // mais partículas para maior densidade
           final double cx = left + drawSize / 2;
           final double cy = top + drawSize / 2;
@@ -1015,11 +954,7 @@ class BubblesPainter extends CustomPainter {
             // Tamanho e halo
             final double r = max(1.5,
                 drawSize * (0.013 + 0.006 * (0.5 + 0.5 * sin(seed * 2.3))));
-<<<<<<< HEAD
             // Variação sutil de cor ciano/azulada
-=======
-            // Cores por tipo (Word: ciano/azulado, Droid: amarelo/dourado com halo esverdeado)
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
             final double colorMix = 0.5 + 0.5 * sin(seed * 0.7 + sweep * 0.3);
             final Color dotColor = Color.lerp(
                 Colors.cyanAccent, Colors.lightBlueAccent, colorMix)!
@@ -1028,7 +963,6 @@ class BubblesPainter extends CustomPainter {
             final Color haloColor = Color.lerp(
                 Colors.cyanAccent, Colors.blueAccent,
                 0.3 + 0.7 * (0.5 + 0.5 * sin(seed * 0.5)))!
-<<<<<<< HEAD
                 .withOpacity(0.24 * opacity);
 
             final Paint haloPaint = Paint()
@@ -1037,18 +971,6 @@ class BubblesPainter extends CustomPainter {
             final Paint dotPaint = Paint()
               ..color = dotColor
               ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
-=======
-                .withOpacity((0.24) * opacity);
-
-            final Paint haloPaint = Paint()
-              ..color = haloColor
-              ..maskFilter = MaskFilter.blur(
-                  BlurStyle.normal, 2.5);
-            final Paint dotPaint = Paint()
-              ..color = dotColor
-              ..maskFilter = MaskFilter.blur(
-                  BlurStyle.normal, 1.2);
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
             canvas.drawCircle(Offset(px, py), r * 1.8, haloPaint);
             canvas.drawCircle(Offset(px, py), r, dotPaint);
           }
