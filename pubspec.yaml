@@ -31,11 +31,11 @@ flutter:
     - assets/sol_bubble.jpg
     - assets/grito.mp3
     - assets/grito2.mp3
-    - assets/plimplim.mp3
+    - assets/assets/plimplim.mp3
     - assets/gifmaster.gif
-    - assets/coletando.mp3
-    - assets/abelha.mp3
-    - assets/risada.mp3
+    - assets/assets/coletando.mp3
+    - assets/assets/abelha.mp3
+    - assets/assets/risada.mp3
     - assets/models/character.obj
     - assets/models/character.mtl
     - assets/models/cube_blue.obj
