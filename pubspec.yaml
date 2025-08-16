@@ -22,29 +22,14 @@ dependencies:
   flutter_cube: ^0.1.1
   rive: ^0.12.4
   shared_preferences: ^2.2.3
+  vector_math: ^2.1.4
+  flame: ^1.12.0
+  model_viewer_plus: ^1.9.3
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon_bolhas.png
-    - assets/bubble_pop.mp3
-    - assets/sol_bubble.jpg
-    - assets/grito.mp3
-    - assets/grito2.mp3
-    - assets/assets/plimplim.mp3
-    - assets/gifmaster.gif
-    - assets/assets/coletando.mp3
-    - assets/assets/abelha.mp3
-    - assets/assets/risada.mp3
-    - assets/models/character.obj
-    - assets/models/character.mtl
-    - assets/models/cube_blue.obj
-    - assets/models/cube_skin.obj
-    - assets/models/cube_green.obj
-    - assets/models/cube_brown.obj
-    - assets/models/colors.mtl
-    # Diretório para paisagens/tiles (deixe os PNGs aqui)
-    - assets/map/tiles/
+    - assets/
 
 dev_dependencies:
   flutter_launcher_icons: ^0.13.1

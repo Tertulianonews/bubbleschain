@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:audioplayers/audioplayers.dart';
 import '../services/supabase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'forest_runner_screen.dart';
 
 // Chip simples usado na intro para destacar elementos temáticos
 class _IntroChip extends StatelessWidget {
@@ -147,6 +148,15 @@ class LevelConfig {
   final Color skyTop;
   final Color skyBottom;
 
+  // Modo veículo: habilita dirigir um carro (ex.: Bug) e obstáculos dedicados
+  final bool vehicleMode;
+  final String vehicleEmoji;
+  final double vehicleWidth;
+  final double vehicleHeight;
+
+  // Em níveis com veículo, normalmente não queremos buracos (lagos)
+  final bool disableHoles;
+
   const LevelConfig({
     required this.name,
     required this.emojiCategory,
@@ -159,6 +169,11 @@ class LevelConfig {
     required this.wallCount,
     required this.skyTop,
     required this.skyBottom,
+    this.vehicleMode = false,
+    this.vehicleEmoji = '🚗',
+    this.vehicleWidth = 60,
+    this.vehicleHeight = 36,
+    this.disableHoles = false,
   });
 }
 
@@ -449,6 +464,147 @@ class CarWidget extends StatelessWidget {
   }
 }
 
+class BugCarWidget extends StatelessWidget {
+  final double width;
+  final double height;
+  final bool facingRight;
+
+  const BugCarWidget({
+    super.key,
+    required this.width,
+    required this.height,
+    required this.facingRight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget paint = CustomPaint(
+      size: Size(width, height),
+      painter: _BugCarPainter(),
+    );
+    if (facingRight) return paint;
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.identity()
+        ..scale(-1.0, 1.0),
+      child: paint,
+    );
+  }
+}
+
+class _BugCarPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+    final double radius = h * 0.18;
+
+    // Shadow
+    final Paint shadow = Paint()
+      ..color = Colors.black.withOpacity(0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(w * 0.5, h * 0.98),
+          width: w * 0.9,
+          height: h * 0.25,
+        ),
+        shadow);
+
+    // Body
+    final RRect body = RRect.fromRectAndRadius(
+      Rect.fromLTWH(w * 0.06, h * 0.32, w * 0.88, h * 0.42),
+      Radius.circular(radius),
+    );
+    final Paint bodyPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(0, h * 0.3),
+        Offset(0, h),
+        [
+          const Color(0xFF2196F3),
+          const Color(0xFF1565C0),
+        ],
+      );
+    canvas.drawRRect(body, bodyPaint);
+
+    // Cabin
+    final Path cabin = Path()
+      ..moveTo(w * 0.28, h * 0.32)
+      ..quadraticBezierTo(w * 0.40, h * 0.10, w * 0.58, h * 0.28)
+      ..lineTo(w * 0.78, h * 0.28)..lineTo(w * 0.78, h * 0.32)
+      ..close();
+    final Paint cabinPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(0, h * 0.1),
+        Offset(0, h * 0.4),
+        [Colors.white.withOpacity(0.9), Colors.blueGrey.shade200],
+      );
+    canvas.drawPath(cabin, cabinPaint);
+
+    // Window highlight
+    final Path windowHighlight = Path()
+      ..moveTo(w * 0.32, h * 0.30)
+      ..quadraticBezierTo(w * 0.46, h * 0.15, w * 0.62, h * 0.28)
+      ..lineTo(w * 0.60, h * 0.30)
+      ..quadraticBezierTo(w * 0.46, h * 0.19, w * 0.34, h * 0.30)
+      ..close();
+    final Paint glassShine = Paint()
+      ..color = Colors.white.withOpacity(0.25);
+    canvas.drawPath(windowHighlight, glassShine);
+
+    // Front bumper
+    final RRect bumper = RRect.fromRectAndRadius(
+      Rect.fromLTWH(w * 0.88, h * 0.50, w * 0.08, h * 0.12),
+      Radius.circular(h * 0.08),
+    );
+    canvas.drawRRect(bumper, Paint()
+      ..color = Colors.grey.shade300);
+
+    // Headlight
+    final Rect headlight = Rect.fromLTWH(
+        w * 0.88, h * 0.40, w * 0.06, h * 0.10);
+    final Paint lightPaint = Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(headlight.center.dx, headlight.center.dy),
+        h * 0.18,
+        [Colors.yellowAccent.withOpacity(0.9), Colors.transparent],
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
+      ..blendMode = BlendMode.plus;
+    canvas.drawOval(headlight, Paint()
+      ..color = Colors.amber.shade200);
+    canvas.drawCircle(headlight.center, h * 0.18, lightPaint);
+
+    // Wheels
+    void drawWheel(double cx, double cy, double r) {
+      final Paint tire = Paint()
+        ..color = const Color(0xFF212121);
+      final Paint rim = Paint()
+        ..color = Colors.grey.shade400;
+      final Paint hub = Paint()
+        ..color = Colors.grey.shade200;
+      canvas.drawCircle(Offset(cx, cy), r, tire);
+      canvas.drawCircle(Offset(cx, cy), r * 0.66, rim);
+      canvas.drawCircle(Offset(cx, cy), r * 0.30, hub);
+    }
+    final double wheelY = h * 0.74;
+    final double wheelR = h * 0.18;
+    drawWheel(w * 0.28, wheelY, wheelR);
+    drawWheel(w * 0.72, wheelY, wheelR);
+
+    // Stripe
+    final Paint stripe = Paint()
+      ..color = Colors.cyanAccent.withOpacity(0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = h * 0.06;
+    canvas.drawLine(
+        Offset(w * 0.20, h * 0.52), Offset(w * 0.76, h * 0.52), stripe);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BugCarPainter oldDelegate) => false;
+}
+
 class GoalWidget extends StatelessWidget {
   final double height;
 
@@ -693,6 +849,7 @@ class TerlineTBuilding extends StatelessWidget {
           ),
         ));
       }
+
     }
     return children;
   }
@@ -1157,6 +1314,12 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   double goalX = 0.0;
   double _lastGroundY = 420.0;
   bool _showIntro = true;
+  bool inVehicle = false; // indica se o jogador está dirigindo um veículo
+  // Fluxo do veículo: 'onFoot' | 'approaching' | 'entering' | 'driving'
+  String _vehiclePhase = 'onFoot';
+  double _parkedCarX = 0.0;
+  double _enterTimer = 0.0;
+  bool _controlsLocked = false;
 
   // Fases
   final List<LevelConfig> levels = [
@@ -1226,6 +1389,27 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       skyTop: const Color(0xFF4CAF50),
       skyBottom: const Color(0xFF2E7D32),
     ),
+    // Fase 6 — Corrida no deserto com Bug (carro) e cactos
+    LevelConfig(
+      name: 'Fase 6 — Bug nas Dunas',
+      emojiCategory: 'deserto',
+      worldLength: 8200,
+      worldDepth: 1600,
+      maxHeight: 260,
+      groundY: 460,
+      coinCount: 60,
+      beeCount: 0,
+      wallCount: 24,
+      // usado como referência de quantidade de cactos
+      skyTop: const Color(0xFFF6D365),
+      skyBottom: const Color(0xFFECC07C),
+      vehicleMode: true,
+      vehicleEmoji: '🚗',
+      // carro um pouco maior para melhor leitura visual
+      vehicleWidth: 94,
+      vehicleHeight: 62,
+      disableHoles: true,
+    ),
   ];
   late LevelConfig currentLevel;
   int levelIndex = 0;
@@ -1244,6 +1428,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   final List<_BigTree> _treesNear = [];
   double _carSpawnTimer = 0.0;
   final List<double> _terlineTBuildingXs = [];
+  final List<_Cactus> _cacti = []; // obstáculos da fase de veículo (deserto)
 
   // Controles
   bool kLeft = false, kRight = false, kJumpHeld = false, kSprint = false;
@@ -1421,11 +1606,23 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     _treesNear.clear();
     _carSpawnTimer = 0.0;
     _terlineTBuildingXs.clear();
+    inVehicle = currentLevel.vehicleMode ? false : false;
+    if (currentLevel.vehicleMode) {
+      // Carro estacionado um pouco à frente do player
+      _vehiclePhase = 'approaching';
+      _parkedCarX = playerX + 180;
+      _enterTimer = 0.6;
+      _controlsLocked = true;
+    } else {
+      _vehiclePhase = 'onFoot';
+      _controlsLocked = false;
+    }
+    _cacti.clear();
 
     // Gerar buracos no solo (segmentos sem plataforma) — não gerar na cidade
     _holes.clear();
     final Random random = Random();
-    if (currentLevel.emojiCategory != 'cidade') {
+    if (currentLevel.emojiCategory != 'cidade' && !currentLevel.disableHoles) {
       final int numHoles = (currentLevel.wallCount).clamp(4, 14);
       for (int i = 0; i < numHoles; i++) {
         final double holeWidth = (BLOCK_SIZE * (3 + random.nextInt(4)))
@@ -1453,8 +1650,11 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
         platforms.add(Rect.fromLTWH(x, groundY, BLOCK_SIZE, BLOCK_SIZE));
       }
     }
-    // Posicionar jogador em pé sobre o chão no início
-    playerY = groundY - PLAYER_SIZE;
+    // Posicionar jogador/veículo em pé sobre o chão no início
+    final double startEntityH = inVehicle
+        ? currentLevel.vehicleHeight
+        : PLAYER_SIZE;
+    playerY = groundY - startEntityH;
 
     // Determinar sets de emojis pela categoria
     final _CategoryEmojiSets sets = _getEmojiSetsForCategory(
@@ -1620,6 +1820,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     _lastGroundY = groundY;
   }
 
+
   void _startGame() {
     isGameStarted = true;
     _playerAnimationController.repeat(
@@ -1665,18 +1866,57 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     // Eixo analógico do joystick (quando ativo). Varia entre -1 (esquerda) e 1 (direita)
     double axis = _joyActive ? _joyVector.dx.clamp(-1.0, 1.0) : 0.0;
     final bool hasKeys = kLeft ^ kRight;
-    if (_joyActive && axis.abs() > 0.05) {
+    // Se controles bloqueados (cutscene para entrar no carro), ignorar input
+    if (_controlsLocked && currentLevel.vehicleMode) {
+      axis = 1.0; // força seguir para a direita
+    }
+    if (_joyActive && axis.abs() > 0.05 && !_controlsLocked) {
       playerVelocityX += MOVE_SPEED * axis * dt * 60;
       // espelha estado das teclas para manter lógica externa consistente
       kLeft = axis < 0;
       kRight = axis > 0;
-    } else if (hasKeys) {
+    } else if (hasKeys && !_controlsLocked) {
       final int dir = kLeft ? -1 : 1;
       playerVelocityX += MOVE_SPEED * dir * dt * 60;
     } else {
       playerVelocityX *= 0.9;
     }
     playerVelocityX = playerVelocityX.clamp(-targetMax, targetMax);
+    // Em modo veículo, lógica da fase de aproximação/entrada/dirigir
+    if (currentLevel.vehicleMode) {
+      if (_vehiclePhase == 'approaching') {
+        // corre até chegar próximo do carro
+        final double targetX = _parkedCarX - currentLevel.vehicleWidth * 0.45;
+        final double dist = targetX - playerX;
+        if (dist > 0) {
+          playerVelocityX += MOVE_SPEED * 0.6 * dt * 60;
+        }
+        // lock direção para direita
+        isFacingRight = true;
+        if (dist <= 4.0 && _onGround) {
+          _vehiclePhase = 'entering';
+          _enterTimer = 0.45;
+        }
+      } else if (_vehiclePhase == 'entering') {
+        // desacelera e toca a animação de entrada
+        playerVelocityX *= 0.85;
+        isFacingRight = true;
+        _enterTimer -= dt;
+        if (_enterTimer <= 0) {
+          inVehicle = true;
+          _vehiclePhase = 'driving';
+          _controlsLocked = false;
+          // encaixa o jogador ao carro
+          playerX = _parkedCarX;
+          playerY = groundY - currentLevel.vehicleHeight;
+        }
+      } else if (_vehiclePhase == 'driving') {
+        // garante velocidade mínima para seguir nas dunas
+        if (playerVelocityX < 2.5) {
+          playerVelocityX = 2.5;
+        }
+      }
+    }
     playerX += playerVelocityX;
 
     // Atualizar direção do personagem
@@ -1689,7 +1929,15 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   }
 
   void _checkCollisions() {
-    final playerRect = Rect.fromLTWH(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE);
+    // Usa dimensões variáveis quando em veículo
+    final double entityWidth = inVehicle
+        ? currentLevel.vehicleWidth
+        : PLAYER_SIZE;
+    final double entityHeight = inVehicle
+        ? currentLevel.vehicleHeight
+        : PLAYER_SIZE;
+    final playerRect = Rect.fromLTWH(
+        playerX, playerY, entityWidth, entityHeight);
     final bool wasOnGround = _onGround; // detectar transição ar->chão
     bool onGround = false;
 
@@ -1697,7 +1945,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     for (final platform in platforms) {
       if (playerRect.overlaps(platform)) {
         if (playerVelocityY > 0 && playerY < platform.top) {
-          playerY = platform.top - PLAYER_SIZE;
+          playerY = platform.top - entityHeight;
           playerVelocityY = 0;
           onGround = true;
           isJumping = false;
@@ -1812,6 +2060,19 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       }
     }
 
+    // Veículo no deserto: colisão com cactos => morte
+    if (!isGameOver && currentLevel.vehicleMode &&
+        currentLevel.emojiCategory == 'deserto') {
+      for (final cactus in _cacti) {
+        if (playerRect.overlaps(cactus.rect)) {
+          _laughPlayer.stop();
+          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _gameOver();
+          break;
+        }
+      }
+    }
+
     // Plantas: colisão com troncos => morte (precisa pular por cima)
     if (!isGameOver && currentLevel.emojiCategory == 'plantas') {
       for (final log in _logs) {
@@ -1849,7 +2110,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     // Verificar chegada na meta (goal)
     if (!isGameOver && !isLevelComplete) {
       // Considera que cruzar a posição X da bandeira finaliza a fase
-      if (playerX + PLAYER_SIZE >= goalX - 4) {
+      if (playerX + entityWidth >= goalX - 4) {
         _completeLevel();
       }
     }
@@ -2095,6 +2356,53 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   }
 
   Widget _buildPlayer() {
+    if (inVehicle) {
+      final double w = currentLevel.vehicleWidth;
+      final double h = currentLevel.vehicleHeight;
+      return SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          children: [
+            BugCarWidget(
+              width: w,
+              height: h,
+              facingRight: isFacingRight,
+            ),
+            // Motorista visível dentro da cabine
+            Positioned(
+              left: w * 0.34,
+              top: h * 0.10,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(h * 0.06),
+                child: SizedBox(
+                  width: w * 0.38,
+                  height: h * 0.28,
+                  child: Center(
+                    child: SizedBox(
+                      width: h * 0.26,
+                      height: h * 0.26,
+                      child: CustomPaint(
+                        painter: HumanoidPainter(
+                          bodyTilt: 0.0,
+                          jumpSquash: 1.0,
+                          isJumping: false,
+                          walkCycle: walkCycle,
+                          speedNorm: (playerVelocityX.abs() / MAX_RUN_SPEED)
+                              .clamp(0.0, 1.0),
+                          facingRight: isFacingRight,
+                        ),
+                        size: Size(h * 0.26, h * 0.26),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return CustomPaint(
       painter: HumanoidPainter(
         bodyTilt: sin(walkCycle) * 0.1,
@@ -2699,6 +3007,28 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                     ),
                   ),
                 ),
+            // Carro estacionado (antes de entrar no veículo)
+            if (currentLevel.vehicleMode && _vehiclePhase != 'driving')
+              Positioned(
+                left: _parkedCarX - cameraOffset,
+                top: groundY - currentLevel.vehicleHeight,
+                child: BugCarWidget(
+                  width: currentLevel.vehicleWidth,
+                  height: currentLevel.vehicleHeight,
+                  facingRight: true,
+                ),
+              ),
+            // Cactos (obstáculos da fase veículo no deserto)
+            if (currentLevel.vehicleMode && isDesert)
+              for (final c in _cacti)
+                Positioned(
+                  left: c.x - cameraOffset,
+                  top: c.yTop,
+                  child: Transform.scale(
+                    scale: c.height / 28.0,
+                    child: Text(c.emoji, style: const TextStyle(fontSize: 28)),
+                  ),
+                ),
 
             // Moedas
             for (final entry in coins
@@ -3300,6 +3630,24 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                   foregroundColor: Colors.white,
                 ),
               ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ForestRunnerScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.nature),
+                  label: const Text('Modo Floresta — Atirar Emojis'),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white70),
+                    foregroundColor: Colors.white,
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  ),
+                ),
             ],
           ],
         ),
@@ -3389,6 +3737,10 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       // Ajustar troncos da fase Plantas
       for (int i = 0; i < _logs.length; i++) {
         _logs[i].yTop = groundY - _logs[i].height;
+      }
+      // Ajustar cactos do deserto (fase veículo)
+      for (int i = 0; i < _cacti.length; i++) {
+        _cacti[i].yTop = groundY - _cacti[i].height;
       }
       // Ajustar criaturas dos lagos
       for (int i = 0; i < _lakeCreatures.length; i++) {
@@ -3635,6 +3987,25 @@ class _IntroFloater {
     required this.emoji,
     required this.opacity,
   });
+}
+
+// Obstáculo de cacto para fase de veículo no deserto
+class _Cactus {
+  double x;
+  double width;
+  double height;
+  double yTop;
+  String emoji;
+
+  _Cactus({
+    required this.x,
+    required this.width,
+    required this.height,
+    required this.yTop,
+    this.emoji = '🌵',
+  });
+
+  Rect get rect => Rect.fromLTWH(x, yTop, width, height);
 }
 
 // ====================== CIDADE: CARROS E PRÉDIOS ======================
