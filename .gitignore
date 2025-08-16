@@ -5,6 +5,10 @@ build/
 !**/src/test/**/build/
 
 ### IntelliJ IDEA ###
+<<<<<<< HEAD
+=======
+.idea/
+>>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
@@ -16,6 +20,12 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 /.dart_tool/
+<<<<<<< HEAD
+=======
+allfiles.txt
+bubbleschain.git/
+
+>>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 
 ### Kotlin ###
 .kotlin
