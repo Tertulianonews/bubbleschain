@@ -14,10 +14,7 @@ import path_provider_foundation
 import rive_common
 import shared_preferences_foundation
 import url_launcher_macos
-<<<<<<< HEAD
-=======
 import webview_flutter_wkwebview
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   AppLinksMacosPlugin.register(with: registry.registrar(forPlugin: "AppLinksMacosPlugin"))
@@ -29,8 +26,5 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   RivePlugin.register(with: registry.registrar(forPlugin: "RivePlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
   UrlLauncherPlugin.register(with: registry.registrar(forPlugin: "UrlLauncherPlugin"))
-<<<<<<< HEAD
-=======
   WebViewFlutterPlugin.register(with: registry.registrar(forPlugin: "WebViewFlutterPlugin"))
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
 }

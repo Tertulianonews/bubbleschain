@@ -136,10 +136,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final resp = await Supabase.instance.client.auth.signUp(
         email: _email.text.trim(),
         password: _pwd.text.trim(),
-<<<<<<< HEAD
-=======
+
+
         emailRedirectTo: 'https://tertulianonews.github.io/bubbleschain/', // Redireciona ao confirmar o email
->>>>>>> 757566ea8fc248ce85274975105fc358d44853b5
+
       );
       setState(() {
         infoMsg = 'Quase lá! Confira seu e-mail para ativar sua conta.';
