@@ -46,6 +46,14 @@ class _CategoryEmojiSets {
   _CategoryEmojiSets({required this.enemyEmojis, required this.lakeEmojis});
 }
 
+// ====================
+// Fase das aves: emojis de aves (galinha, pintinho, galo) como inimigos flutuantes.
+// Obstáculos: Ovos gigantes (emoji 🥚) rolam horizontalmente pelo chão, bloqueando o personagem.
+// O jogador deve pular sobre eles, assim como se faz com os carros na cidade.
+// Os ovos usam renderização visível maior—emoji ampliado, pode ser estilizado ou realista (proporções grandes).
+// Sua lógica de movimentação e colisão é documentada abaixo onde foram implementados.
+// ====================
+
 /// For each category, produce emoji sets for enemies (floating) and lakes.
 /// Can be expanded per level!
 _CategoryEmojiSets _getEmojiSetsForCategory(String category) {
@@ -89,6 +97,20 @@ _CategoryEmojiSets _getEmojiSetsForCategory(String category) {
       return _CategoryEmojiSets(
         enemyEmojis: ['👻', '🤖', '👽', '🎃', '🦄', '👾'],
         lakeEmojis: ['🦑', '🐙', '🧟', '👽'],
+      );
+    case 'aves':
+    // Fase das aves:
+    // Emojis de galinha, pintinho e galo flutuam como inimigos (estilo abelhas).
+    // Ovos gigantes (🧑 emoji 🥚) aparecem rolando como obstáculos horizontais próximos ao solo.
+    // Papel didático: ensina lógica de salto sobre obstáculos terrestres em movimento.
+      return _CategoryEmojiSets(
+        enemyEmojis: ['🐔', '🐤', '🐓'],
+        lakeEmojis: ['🥚', '🐣'], // apenas decorativos nos lagos
+      );
+    case 'espiritos':
+      return _CategoryEmojiSets(
+        enemyEmojis: ['💀', '☠️', '👻', '💀', '☠️', '👻'],
+        lakeEmojis: ['💀', '👻', '☠️'],
       );
     default:
       return _CategoryEmojiSets(
@@ -1106,7 +1128,9 @@ class HumanoidPainter extends CustomPainter {
 
 // ====================== TELA PRINCIPAL ======================
 class TerlineTWordScreen extends StatefulWidget {
-  const TerlineTWordScreen({super.key});
+  final bool demoMode;
+
+  const TerlineTWordScreen({super.key, this.demoMode = false});
 
   @override
   State<TerlineTWordScreen> createState() => _TerlineTWordScreenState();
@@ -1226,6 +1250,35 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       skyTop: const Color(0xFF4CAF50),
       skyBottom: const Color(0xFF2E7D32),
     ),
+    // Nova fase 7: Fase das Aves
+    LevelConfig(
+      name: 'Fase 7 — Corrida das Aves',
+      emojiCategory: 'aves',
+      worldLength: 7500,
+      worldDepth: 1300,
+      maxHeight: 260,
+      groundY: 420,
+      coinCount: 85,
+      beeCount: 22,
+      wallCount: 10,
+      skyTop: const Color(0xFFE3E1C5),
+      skyBottom: const Color(0xFFF1E5A7),
+    ),
+    // Nova fase 8: Terra dos Espíritos
+    LevelConfig(
+      name: 'Fase 8 — Terra dos Espíritos',
+      emojiCategory: 'espiritos',
+      worldLength: 8000,
+      worldDepth: 1400,
+      maxHeight: 280,
+      groundY: 440,
+      coinCount: 70,
+      beeCount: 18,
+      wallCount: 12,
+      skyTop: Colors.black,
+      // Céu totalmente preto
+      skyBottom: Colors.black, // Céu totalmente preto
+    ),
   ];
   late LevelConfig currentLevel;
   int levelIndex = 0;
@@ -1235,6 +1288,9 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   final List<_Bee> bees = [];
   final List<_Car> _cars = [];
   final List<_Log> _logs = [];
+
+  // Ovos gigantes (obstáculos) para a fase das aves
+  final List<_GiantEgg> _giantEggs = []; // Giant eggs for 'aves' level
   final List<_Dust> dusts = [];
   final List<_Sparkle> sparkles = [];
   final ParticleSystem _particleSystem = ParticleSystem();
@@ -1244,6 +1300,15 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   final List<_BigTree> _treesNear = [];
   double _carSpawnTimer = 0.0;
   final List<double> _terlineTBuildingXs = [];
+
+  // Variáveis para a fase da bola Bitcoin
+  double? bitcoinBallX;
+  double? bitcoinBallY;
+  double bitcoinBallRadius = 90.0;
+  double bitcoinBallVX = 0.0;
+  bool isPushingBitcoin = false;
+  bool hasBitcoinLoss = false;
+  double bitcoinSlope = 0.38; // Inclinação: 0.38 > subida mais acentuada
 
   // Controles
   bool kLeft = false, kRight = false, kJumpHeld = false, kSprint = false;
@@ -1388,6 +1453,18 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     worldLength = cfg.worldLength.toDouble();
     groundY = cfg.groundY.toDouble();
     goalX = worldLength - 120.0;
+    // Inicializa bola Bitcoin caso seja a Fase 6
+    if (cfg.emojiCategory == 'bitcoin') {
+      bitcoinBallX = 110;
+      bitcoinBallY = groundY - bitcoinBallRadius;
+      bitcoinBallVX = 0.0;
+      hasBitcoinLoss = false;
+    } else {
+      bitcoinBallX = null;
+      bitcoinBallY = null;
+      bitcoinBallVX = 0.0;
+      hasBitcoinLoss = false;
+    }
   }
 
   void _resetGame() {
@@ -1412,6 +1489,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     bees.clear();
     _cars.clear();
     _logs.clear();
+    _giantEggs.clear();
     dusts.clear();
     sparkles.clear();
     _lakeCreatures.clear();
@@ -1580,6 +1658,60 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       }
     }
 
+    // -------- Fase dos espíritos: geração dos túmulos ---------
+    // Os túmulos funcionam como obstáculos visuais e de colisão. O jogador precisa pular sobre eles, como os troncos na fase das plantas.
+    if (currentLevel.emojiCategory == 'espiritos') {
+      final int numGraves = currentLevel.wallCount.clamp(8, 16);
+      for (int i = 0; i < numGraves; i++) {
+        final double w = 38 + random.nextDouble() * 28; // largura 38..66
+        final double h = 42 + random.nextDouble() * 18; // altura 42..60
+        final double minX = 220.0;
+        final double maxX = worldLength - 220.0 - w;
+        if (maxX <= minX) break;
+        final double x = minX + random.nextDouble() * (maxX - minX);
+        // Evitar colocar túmulos dentro de buracos/lagos e longe de outros túmulos
+        final bool inHole = _holes.any((hSeg) =>
+        (x + w) > hSeg.startX && x < hSeg.endX);
+        if (inHole) continue;
+        bool overlapsOther = _logs.any((l) =>
+        (x + w + BLOCK_SIZE) > l.x && (x - BLOCK_SIZE) < (l.x + l.width));
+        if (overlapsOther) continue;
+        _logs.add(_Log(x: x, width: w, height: h, yTop: groundY - h));
+      }
+
+      // Árvores mortas de fundo para fase dos espíritos
+      _treesFar.clear();
+      _treesNear.clear();
+      double xFar = -200;
+      final int nFar = (worldLength / 400).ceil();
+      for (int i = 0; i < nFar; i++) {
+        final double w = 80 + random.nextDouble() * 80;
+        final double h = 170 + random.nextDouble() * 80;
+        _treesFar.add(_BigTree(
+          x: xFar,
+          width: w,
+          height: h,
+          trunkColor: const Color(0xFF444444),
+          canopyColor: const Color(0xFF18181C), // Quase preto/cinza
+        ));
+        xFar += w + 120 + random.nextDouble() * 60;
+      }
+      double xNear = -120;
+      final int nNear = (worldLength / 320).ceil();
+      for (int i = 0; i < nNear; i++) {
+        final double w = 120 + random.nextDouble() * 120;
+        final double h = 220 + random.nextDouble() * 120;
+        _treesNear.add(_BigTree(
+          x: xNear,
+          width: w,
+          height: h,
+          trunkColor: const Color(0xFF555555),
+          canopyColor: const Color(0xFF232323), // Quase preto
+        ));
+        xNear += w + 110 + random.nextDouble() * 80;
+      }
+    }
+
     // Gerar prédios da cidade (camadas parallax)
     if (currentLevel.emojiCategory == 'cidade') {
       // Longe
@@ -1618,6 +1750,34 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       }
     }
     _lastGroundY = groundY;
+
+    // -------- Fase das aves: geração dos ovos gigantes ---------
+    // Os ovos gigantes funcionam como obstáculos, rolando pela tela em posições e velocidades randômicas.
+    // Eles devem ser evitados pelo personagem, exigindo pulos para não serem atingidos.
+    if (currentLevel.emojiCategory == 'aves') {
+      final int numEggs = 16;
+      final random = Random();
+      for (int i = 0; i < numEggs; i++) {
+        final double x = 350 + random.nextDouble() * (worldLength - 700);
+        final double size = 55 +
+            random.nextDouble() * 48; // ovos entre 55 a 103 px
+        final double speed = 3.0 + random.nextDouble() * 1.5;
+        final bool leftToRight = random.nextBool();
+        _giantEggs.add(_GiantEgg(
+          x: x,
+          y: groundY - size,
+          // inicia no solo
+          width: size * 0.8,
+          height: size,
+          speed: leftToRight ? speed : -speed,
+          // direção aleatória
+          emoji: '🥚',
+          // emoji de ovo ampliado
+          // Estado com phase exclusivo para permitir rotação/rolagem animada
+          rollingPhase: random.nextDouble() * pi * 2,
+        ));
+      }
+    }
   }
 
   void _startGame() {
@@ -1653,6 +1813,52 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   }
 
   void _applyPhysics(double dt) {
+    // Fase Bitcoin: controle da bola e subida
+    if (currentLevel.emojiCategory == 'bitcoin' && bitcoinBallX != null &&
+        bitcoinBallY != null) {
+      // Simula uma subida inclinada
+      double slope = bitcoinSlope;
+      // Posição do chão é uma linha inclinada
+      groundY = 420 - slope * (playerX - 100);
+      // Impede o personagem de passar da bola (tem que empurrar)
+      if (playerX < bitcoinBallX! + bitcoinBallRadius * 0.6) {
+        // Só pode avançar estando colado na bola
+        playerX = bitcoinBallX! + bitcoinBallRadius * 0.6;
+        playerVelocityX = max(0, playerVelocityX);
+      }
+      // Empurrando bola para cima
+      if ((kRight || _joyVector.dx > 0.15) && playerX < goalX) {
+        isPushingBitcoin = true;
+        bitcoinBallVX = 1.1 + min(playerVelocityX.abs(), 5.0) * 0.7;
+      } else {
+        // Se parar de empurrar, bola rola para trás
+        isPushingBitcoin = false;
+        bitcoinBallVX -= 1.2 * dt; // acelera para trás
+        bitcoinBallVX = max(bitcoinBallVX, -6.2);
+      }
+      bitcoinBallX = (bitcoinBallX! + bitcoinBallVX);
+      // Bola nunca ultrapassa goalX
+      if (bitcoinBallX! > goalX) bitcoinBallX = goalX;
+      // Limita movimentos
+      bitcoinBallVX *= 0.95; // atrito
+      // Ajusta personagem para ficar empurrando
+      playerX = bitcoinBallX! + bitcoinBallRadius * 0.60;
+      playerY = groundY - PLAYER_SIZE;
+      // Se bola voltar e encostar no player (playerX - bolaX < raio - tolerância), derrota
+      if (playerX - bitcoinBallX! < bitcoinBallRadius * 0.40) {
+        hasBitcoinLoss = true;
+        _gameOver();
+      }
+      // Se bola chegar ao topo, vitória
+      if (!isGameOver && bitcoinBallX! + bitcoinBallRadius >= goalX) {
+        _completeLevel();
+      }
+      // Atualizar ciclo de caminhada (usando ritmo do push)
+      walkCycle += 0.19 * dt * 60;
+
+      return;
+    }
+
     // Gravidade
     double g = GRAVITY;
     if (playerVelocityY > 0) g += 0.22;
@@ -1824,6 +2030,18 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       }
     }
 
+    // Espíritos: colisão com túmulos => morte (precisa pular por cima)
+    if (!isGameOver && currentLevel.emojiCategory == 'espiritos') {
+      for (final log in _logs) {
+        if (playerRect.overlaps(log.rect)) {
+          _laughPlayer.stop();
+          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _gameOver();
+          break;
+        }
+      }
+    }
+
     // Verificar morte por água (lagos)
     if (!isGameOver) {
       final double playerLeft = playerRect.left;
@@ -1843,6 +2061,21 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
           .height;
       if (playerRect.top > screenHeight + 20) {
         _gameOver();
+      }
+    }
+
+    // ========== Fase das aves: colisão com ovos gigantes ==========
+    // O jogador que tocar qualquer parte do ovo gigante perde (Game Over).
+    // Regra igual à colisão com carros na cidade: contato lateral, superior ou inferior resulta em derrota.
+    if (!isGameOver && currentLevel.emojiCategory == 'aves') {
+      for (final egg in _giantEggs) {
+        final Rect eggRect = Rect.fromLTWH(egg.x, egg.y, egg.width, egg.height);
+        if (playerRect.overlaps(eggRect)) {
+          _laughPlayer.stop();
+          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _gameOver();
+          break;
+        }
       }
     }
 
@@ -1941,6 +2174,22 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
 
     // Atualizar partículas
     _particleSystem.update(dt);
+
+    // ========== Fase das aves: atualiza ovos gigantes ==========
+    // Logica: ovos são reciclados/removidos ao sair do viewport, rolam no solo,
+    // animam uma pequena rotação (rollingPhase). O ovo "flutua" levemente para dar vida.
+    if (currentLevel.emojiCategory == 'aves') {
+      _giantEggs.removeWhere((egg) =>
+      (egg.x < cameraOffset - 200) ||
+          (egg.x > worldLength + 200));
+      for (final egg in _giantEggs) {
+        egg.x += egg.speed;
+        egg.rollingPhase += 0.13; // Simula rotação enquanto rola
+        egg.y = groundY - egg.height -
+            cos(egg.rollingPhase) * 6; // flutuação vertical leve
+      }
+      // Dica: Spawn recorrente pode ser adicionado para maior desafio ou reciclagem quando sair do cenário.
+    }
 
     // Cidade: spawn e movimento de carros
     if (currentLevel.emojiCategory == 'cidade') {
@@ -2284,562 +2533,114 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery
+        .of(context)
+        .size
+        .height;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final bool isDesert = currentLevel.emojiCategory == 'deserto';
-    final bool isCity = currentLevel.emojiCategory == 'cidade';
-    final bool isPlants = currentLevel.emojiCategory == 'plantas';
-    // Dimensões destacadas para o prédio TerlineT AI (maior e mais largo)
-    const double terlineTWidth = 320;
-    const double terlineTHeight = 380;
+    final bool isBitcoin = currentLevel.emojiCategory == 'bitcoin';
+    // ---------- Corrige a câmera da Fase Bitcoin: mantém bola/personagem sempre visíveis ----------
+    double camBaseX = 0.0;
+    double camBaseY = 0.0;
+    if (isBitcoin && bitcoinBallX != null) {
+      // Acompanha o X da bola com leve defasagem à esquerda
+      camBaseX = bitcoinBallX! - screenWidth * 0.28;
+      // Acompanha o Y inclinando o solo, mantendo centro visual (55% da tela)
+      camBaseY =
+          (420 - bitcoinSlope * (bitcoinBallX! - 100)) - screenHeight * 0.62;
+      if (camBaseX < 0) camBaseX = 0;
+      if (camBaseY < 0) camBaseY = 0;
+    } else {
+      camBaseX = cameraOffset;
+      camBaseY = 0.0;
+    }
 
-    return Scaffold(
+    Widget visualContent = Scaffold(
       body: RawKeyboardListener(
         focusNode: _focusNode,
         autofocus: true,
         onKey: _onRawKey,
         child: Stack(
           children: [
-            // Céu: usa imagem se disponível; caso contrário, mantém gradiente
-            if (_parallaxReady)
+            // ========== CÉU DE FUNDO PARADO ===========
+            if (isBitcoin)
               Positioned.fill(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFF6B36D), Color(0xFFCE731D)],
+                    ),
+                  ),
+                ),
+              ),
+            // ========== Ladeira inclinada, movimento relativo à câmera ==========
+            if (isBitcoin)
+              Positioned(
+                left: -camBaseX,
+                top: -camBaseY,
+                child: Transform(
+                  transform: Matrix4.identity()
+                    ..rotateZ(-atan(bitcoinSlope)),
+                  alignment: Alignment.bottomLeft,
+                  child: Container(
+                    width: worldLength + 350,
+                    height: screenHeight * 2.2,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topRight,
+                        end: Alignment.bottomLeft,
+                        colors: [Color(0xFF8B4F1A), Color(0xFF403926)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // ========== BOLA GIGANTE e PERSONAGEM SEMPRE VISÍVEIS =============
+            if (isBitcoin && bitcoinBallX != null && bitcoinBallY != null)
+              Positioned(
+                left: (bitcoinBallX! - camBaseX) - bitcoinBallRadius,
+                top: (420 - bitcoinSlope * (bitcoinBallX! - 100) - camBaseY) -
+                    bitcoinBallRadius * 1.15,
                 child: Image.asset(
-                  _skyAsset,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      currentLevel.skyTop,
-                      currentLevel.skyBottom,
-                    ],
-                  ),
+                  'assets/Bitcoin.png',
+                  width: bitcoinBallRadius * 2.25,
+                  height: bitcoinBallRadius * 2.25,
+                  fit: BoxFit.contain,
                 ),
               ),
-            // Camada de nuvens de fundo (parallax suave, repetindo em X)
-            if (_hasCloudsBG)
+            if (isBitcoin && bitcoinBallX != null)
               Positioned(
-                left: -cameraOffset * 0.06,
-                top: 20,
-                child: Opacity(
-                  opacity: 0.45,
-                  child: Container(
-                    width: worldLength + 1200,
-                    height: 180,
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage(_cloudsBGAsset),
-                        repeat: ImageRepeat.repeatX,
-                        alignment: Alignment.topLeft,
-                        fit: BoxFit.none,
-                        filterQuality: FilterQuality.none,
-                      ),
+                left: (bitcoinBallX! - camBaseX) - bitcoinBallRadius * 1.16 -
+                    PLAYER_SIZE * 0.78,
+                top: (420 - bitcoinSlope * (bitcoinBallX! - 100) - camBaseY) -
+                    PLAYER_SIZE - 0.0,
+                child: Transform(
+                  alignment: Alignment.centerLeft,
+                  transform: Matrix4.identity()
+                    ..rotateZ(-0.32),
+                  child: CustomPaint(
+                    painter: HumanoidPainter(
+                      bodyTilt: 0.30,
+                      jumpSquash: 1.0,
+                      isJumping: false,
+                      walkCycle: walkCycle,
+                      speedNorm: 0.9,
+                      facingRight: true,
                     ),
+                    size: Size(PLAYER_SIZE * 1.17, PLAYER_SIZE * 1.11),
                   ),
                 ),
               ),
-            // Colinas distantes
-            if (!isDesert && !isCity && (_hasHillsV02 || _hasHillsV01))
+            // Bandeira topo da ladeira: acompanha "subida"
+            if (isBitcoin && bitcoinBallX != null)
               Positioned(
-                left: -cameraOffset * 0.10,
-                top: groundY - 268,
-                child: Opacity(
-                  opacity: 0.80,
-                  child: Container(
-                    width: worldLength + 1400,
-                    height: 220,
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage(
-                            _hasHillsV02 ? _hillsV02Asset : _hillsV01Asset),
-                        repeat: ImageRepeat.repeatX,
-                        alignment: Alignment.bottomLeft,
-                        fit: BoxFit.none,
-                        filterQuality: FilterQuality.none,
-                      ),
-                    ),
-                  ),
-                ),
+                left: (goalX - camBaseX) - bitcoinBallRadius * 0.23,
+                top: (420 - bitcoinSlope * (goalX - 100) - camBaseY) - 103,
+                child: const GoalWidget(height: 98),
               ),
-            // Colinas próximas (se tivermos as duas variantes, usamos a outra camada)
-            if (!isDesert && !isCity && _hasHillsV02 && _hasHillsV01)
-              Positioned(
-                left: -cameraOffset * 0.18,
-                top: groundY - 218,
-                child: Opacity(
-                  opacity: 0.90,
-                  child: Container(
-                    width: worldLength + 1400,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage(_hillsV01Asset),
-                        repeat: ImageRepeat.repeatX,
-                        alignment: Alignment.bottomLeft,
-                        fit: BoxFit.none,
-                        filterQuality: FilterQuality.none,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            // Nuvens (parallax leve)
-            for (final c in clouds)
-              Positioned(
-                left: c.x - cameraOffset * 0.15,
-                top: c.y,
-                child: Transform.scale(
-                  scale: c.scale,
-                  child: const CloudWidget(),
-                ),
-              ),
-
-            // Árvores grandes no plano de fundo (fase Plantas)
-            if (isPlants) ...[
-              // Camada distante de árvores
-              for (final t in _treesFar)
-                Positioned(
-                  left: t.x - cameraOffset * 0.10,
-                  top: groundY - t.height - 120,
-                  child: _buildTree(
-                      t.width, t.height, t.trunkColor.withOpacity(0.9),
-                      t.canopyColor.withOpacity(0.9)),
-                ),
-              // Camada próxima de árvores
-              for (final t in _treesNear)
-                Positioned(
-                  left: t.x - cameraOffset * 0.18,
-                  top: groundY - t.height - 40,
-                  child: _buildTree(
-                      t.width, t.height, t.trunkColor, t.canopyColor),
-                ),
-            ],
-
-            // Holofotes varrendo o céu (atrás dos prédios)
-            if (isCity)
-              for (final tx in _terlineTBuildingXs) ...[
-                Positioned(
-                  left: (tx - 20) - cameraOffset * 0.10,
-                  top: groundY - 380 - 200,
-                  child: IgnorePointer(
-                    child: _SearchLight(
-                      length: 320,
-                      baseWidth: 90,
-                      color: Colors.yellowAccent,
-                      phase: tx * 0.0003,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: (tx + 80) - cameraOffset * 0.10,
-                  top: groundY - 380 - 200,
-                  child: IgnorePointer(
-                    child: _SearchLight(
-                      length: 300,
-                      baseWidth: 80,
-                      color: Colors.cyanAccent,
-                      phase: 1.2 + tx * 0.00037,
-                    ),
-                  ),
-                ),
-              ],
-
-            // Skyline da cidade (prédios em duas camadas + prédio TerlineT)
-            if (isCity) ...[
-              // Camada distante
-              for (final b in _cityBuildingsFar)
-                Positioned(
-                  left: b.x - cameraOffset * 0.08,
-                  top: groundY - b.height - 80,
-                  child: Container(
-                    width: b.width,
-                    height: b.height,
-                    decoration: BoxDecoration(
-                      color: b.color.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-              // Camada próxima
-              for (final b in _cityBuildingsNear)
-                Positioned(
-                  left: b.x - cameraOffset * 0.14,
-                  top: groundY - b.height - 30,
-                  child: Container(
-                    width: b.width,
-                    height: b.height,
-                    decoration: BoxDecoration(
-                      color: b.color,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                ),
-    // Renderiza prédios TerlineT na camada próxima do skyline (maiores)
-              for (final tx in _terlineTBuildingXs)
-                Positioned(
-                  left: tx - cameraOffset * 0.14,
-    top: groundY - terlineTHeight,
-    child: TerlineTBuilding(width: terlineTWidth, height: terlineTHeight),
-                ),
-            ],
-
-            // Dunas (parallax) quando deserto
-            if (isDesert)
-              ...[
-                for (double x = 0; x < worldLength + 800; x += 360)
-                  Positioned(
-                    left: x - cameraOffset * 0.10,
-                    top: groundY - 240,
-                    child: const HillWidget(
-                      color: Color(0xFFE6C78E),
-                      scale: 1.2,
-                    ),
-                  ),
-                for (double x = 0; x < worldLength + 800; x += 420)
-                  Positioned(
-                    left: x - cameraOffset * 0.18,
-                    top: groundY - 200,
-                    child: const HillWidget(
-                      color: Color(0xFFC9A56A),
-                      scale: 1.1,
-                    ),
-                  ),
-              ],
-
-            // Chão
-            Positioned(
-              left: -cameraOffset,
-              top: groundY,
-              child: Container(
-                width: worldLength,
-                height: MediaQuery
-                    .of(context)
-                    .size
-                    .height - groundY,
-                decoration: BoxDecoration(
-                  gradient: isDesert
-                      ? const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFFEED9A6), // areia clara
-                      Color(0xFFDAB77E), // areia média
-                    ],
-                  )
-                      : (isCity
-                      ? const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF424242),
-                      Color(0xFF212121),
-                    ],
-                  )
-                      : LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.green.shade600,
-                      Colors.green.shade800,
-                    ],
-                  )),
-                ),
-              ),
-            ),
-            // Faixas da pista (tracejadas) para cidade
-            if (isCity)
-              ...[
-                for (double x = 0; x < worldLength; x += 60)
-                  Positioned(
-                    left: x - cameraOffset,
-                    top: groundY + 26,
-                    child: Container(
-                      width: 32,
-                      height: 4,
-                      color: Colors.amberAccent.withOpacity(0.9),
-                    ),
-                  ),
-                for (double x = 30; x < worldLength; x += 60)
-                  Positioned(
-                    left: x - cameraOffset,
-                    top: groundY + 58,
-                    child: Container(
-                      width: 32,
-                      height: 4,
-                      color: Colors.amberAccent.withOpacity(0.9),
-                    ),
-                  ),
-              ],
-            // Lagos (água nos buracos) - desenhar antes das plataformas (não na cidade)
-            if (!isCity)
-              for (final h in _holes)
-                Positioned(
-                  left: h.startX - cameraOffset,
-                  top: groundY,
-                  child: Container(
-                    width: (h.endX - h.startX),
-                    height: MediaQuery
-                        .of(context)
-                        .size
-                        .height - groundY,
-                    decoration: BoxDecoration(
-                      gradient: isDesert
-                          ? const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0xFFE6C78E), // areia do topo
-                          Color(0xFFC9A56A), // areia mais funda
-                        ],
-                      )
-                          : LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.blueAccent.withOpacity(0.75),
-                          Color(0xFF303F9F).withOpacity(0.9),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            // Superfície da água (linha mais clara)
-            if (!isDesert && !isCity)
-              for (final h in _holes)
-                Positioned(
-                  left: h.startX - cameraOffset,
-                  top: groundY - 2,
-                  child: Container(
-                    width: (h.endX - h.startX),
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.lightBlueAccent.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.lightBlueAccent.withOpacity(0.6),
-                          blurRadius: 6,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-            // Criaturas dos lagos (emojis boiando) — não na cidade
-            if (!isCity)
-              for (final c in _lakeCreatures)
-                Positioned(
-                  left: c.x - cameraOffset - 14,
-                  top: (c.baseY + sin(nowMs * 0.004 + c.phase) * c.amp) - 14,
-                  child: Transform.scale(
-                    scale: c.scale,
-                    child: Text(c.emoji, style: const TextStyle(fontSize: 28)),
-                  ),
-                ),
-
-            // Plataformas (não desenhar na cidade; mantidas para colisão)
-            if (!isCity)
-              for (final platform in platforms)
-                if ((platform.right - cameraOffset) > -50 &&
-                    (platform.left - cameraOffset) < screenWidth + 50)
-                  Positioned(
-                    left: platform.left - cameraOffset,
-                    top: platform.top,
-                    child: Container(
-                      width: platform.width,
-                      height: platform.height,
-                      decoration: BoxDecoration(
-                        color: isDesert
-                            ? const Color(0xFFD2B48C) // areia/terra
-                            : Colors.green.shade700,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-
-            // Troncos (obstáculos da fase Plantas)
-            if (isPlants)
-              for (final log in _logs)
-                Positioned(
-                  left: log.x - cameraOffset,
-                  top: log.yTop,
-                  child: Container(
-                    width: log.width,
-                    height: log.height,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFFA1887F), Color(0xFF6D4C41)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.brown.shade200.withOpacity(0.8),
-                          borderRadius: const BorderRadius.vertical(top: Radius
-                              .circular(6)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-            // Moedas
-            for (final entry in coins
-                .asMap()
-                .entries)
-              if (!collectedCoins.contains(entry.key))
-                Positioned(
-                  left: entry.value.dx - cameraOffset - 10,
-                  top: entry.value.dy - 10,
-                  child: Transform.scale(
-                    scale: 0.9 + 0.15 * sin((nowMs * 0.008) + entry.key),
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const RadialGradient(
-                          colors: [Colors.amber, Colors.orange],
-                          stops: [0.3, 1.0],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.orange.withOpacity(0.6),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-            // Inimigos da fase (emojis por categoria)
-            for (final b in bees)
-              Positioned(
-                left: b.x - cameraOffset - 24,
-                top: b.currentY - 12,
-                child: BeeWidget(
-                    scale: 1.0, facingRight: b.dir >= 0, emoji: b.emoji),
-              ),
-
-            // Carros da cidade
-            if (isCity)
-              for (final car in _cars)
-                Positioned(
-                  left: car.x - cameraOffset,
-                  top: car.yTop,
-                  child: CarWidget(emoji: car.emoji, scale: 1.0),
-                ),
-
-            // Personagem
-            Positioned(
-              left: playerX - cameraOffset,
-              top: playerY,
-              child: _buildPlayer(),
-            ),
-
-            // Meta
-            Positioned(
-              left: goalX - cameraOffset - 8,
-              top: groundY - 90,
-              child: const GoalWidget(height: 90),
-            ),
-
-            // Partículas
-            Positioned(
-              left: 0,
-              top: 0,
-              child: CustomPaint(
-                painter: _ParticlePainter(
-                  particles: _particleSystem.particles,
-                  cameraOffset: cameraOffset,
-                ),
-                size: Size(screenWidth, MediaQuery
-                    .of(context)
-                    .size
-                    .height),
-              ),
-            ),
-
-            // UI
-            Positioned(
-              top: 30,
-              left: 20,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Pontuação
-                  Text(
-                    'Pontos: $score',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 4,
-                          color: Colors.black,
-                          offset: Offset(2, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Moedas
-                  Text(
-                    'Moedas: $coinsCollected',
-                    style: const TextStyle(
-                      color: Colors.amber,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 4,
-                          color: Colors.black,
-                          offset: Offset(2, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Saldo Bubble Coin
-                  Row(
-                    children: [
-                      Image.asset(
-                          'assets/icon_bolhas.png', width: 24, height: 24),
-                      const SizedBox(width: 8),
-                      Text(
-                        balance.toStringAsFixed(8),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            // Indicador de fase no canto superior direito
+            // Indicador de fase apenas
             Positioned(
               top: 30,
               right: 20,
@@ -2851,7 +2652,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Fase ${levelIndex + 1}',
+                  currentLevel.name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -2860,31 +2661,627 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                 ),
               ),
             ),
-
-            // Badges de recompensa
-            if (showEmojiBadge)
-              Positioned(
-                top: 100,
-                left: screenWidth / 2 - 100,
-                child: AnimatedOpacity(
-                  opacity: emojiBadgeOpacity,
-                  duration: const Duration(milliseconds: 300),
+            // ELEMENTOS NORMAIS DAS OUTRAS FASES — não mostrado na fase Bitcoin
+            if (!isBitcoin)
+              ...[
+                // Céu: usa imagem se disponível; caso contrário, mantém gradiente
+                if (_parallaxReady)
+                  Positioned.fill(
+                    child: Image.asset(
+                      _skyAsset,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          currentLevel.skyTop,
+                          currentLevel.skyBottom,
+                        ],
+                      ),
+                    ),
+                  ),
+                // Camada de nuvens de fundo (parallax suave, repetindo em X)
+                if (_hasCloudsBG)
+                  Positioned(
+                    left: -cameraOffset * 0.06,
+                    top: 20,
+                    child: Opacity(
+                      opacity: 0.45,
+                      child: Container(
+                        width: worldLength + 1200,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(_cloudsBGAsset),
+                            repeat: ImageRepeat.repeatX,
+                            alignment: Alignment.topLeft,
+                            fit: BoxFit.none,
+                            filterQuality: FilterQuality.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Colinas distantes
+                if (currentLevel.emojiCategory != 'deserto' &&
+                    currentLevel.emojiCategory != 'cidade' &&
+                    (_hasHillsV02 || _hasHillsV01))
+                  Positioned(
+                    left: -cameraOffset * 0.10,
+                    top: groundY - 268,
+                    child: Opacity(
+                      opacity: 0.80,
+                      child: Container(
+                        width: worldLength + 1400,
+                        height: 220,
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(
+                                _hasHillsV02 ? _hillsV02Asset : _hillsV01Asset),
+                            repeat: ImageRepeat.repeatX,
+                            alignment: Alignment.bottomLeft,
+                            fit: BoxFit.none,
+                            filterQuality: FilterQuality.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Colinas próximas (se tivermos as duas variantes, usamos a outra camada)
+                if (currentLevel.emojiCategory != 'deserto' &&
+                    currentLevel.emojiCategory != 'cidade' && _hasHillsV02 &&
+                    _hasHillsV01)
+                  Positioned(
+                    left: -cameraOffset * 0.18,
+                    top: groundY - 218,
+                    child: Opacity(
+                      opacity: 0.90,
+                      child: Container(
+                        width: worldLength + 1400,
+                        height: 200,
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage(_hillsV01Asset),
+                            repeat: ImageRepeat.repeatX,
+                            alignment: Alignment.bottomLeft,
+                            fit: BoxFit.none,
+                            filterQuality: FilterQuality.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Nuvens (parallax leve)
+                for (final c in clouds)
+                  Positioned(
+                    left: c.x - cameraOffset * 0.15,
+                    top: c.y,
+                    child: Transform.scale(
+                      scale: c.scale,
+                      child: const CloudWidget(),
+                    ),
+                  ),
+                // Árvores grandes no plano de fundo (fase Plantas)
+                if (currentLevel.emojiCategory == 'plantas') ...[
+                  // Camada distante de árvores
+                  for (final t in _treesFar)
+                    Positioned(
+                      left: t.x - cameraOffset * 0.10,
+                      top: groundY - t.height - 120,
+                      child: _buildTree(
+                          t.width, t.height, t.trunkColor.withOpacity(0.9),
+                          t.canopyColor.withOpacity(0.9)),
+                    ),
+                  // Camada próxima de árvores
+                  for (final t in _treesNear)
+                    Positioned(
+                      left: t.x - cameraOffset * 0.18,
+                      top: groundY - t.height - 40,
+                      child: _buildTree(
+                          t.width, t.height, t.trunkColor, t.canopyColor),
+                    ),
+                ],
+                // Árvores mortas no fundo para "espiritos" (cenário noturno)
+                if (currentLevel.emojiCategory == 'espiritos') ...[
+                  for (final t in _treesFar)
+                    Positioned(
+                      left: t.x - cameraOffset * 0.10,
+                      top: groundY - t.height - 105,
+                      child: _buildTree(
+                        t.width,
+                        t.height,
+                        t.trunkColor.withOpacity(0.82),
+                        t.canopyColor.withOpacity(0.74),
+                      ),
+                    ),
+                  for (final t in _treesNear)
+                    Positioned(
+                      left: t.x - cameraOffset * 0.15,
+                      top: groundY - t.height - 25,
+                      child: _buildTree(
+                        t.width,
+                        t.height,
+                        t.trunkColor,
+                        t.canopyColor,
+                      ),
+                    ),
+                ],
+                // Holofotes varrendo o céu (atrás dos prédios)
+                if (currentLevel.emojiCategory == 'cidade')
+                  for (final tx in _terlineTBuildingXs) ...[
+                    Positioned(
+                      left: (tx - 20) - cameraOffset * 0.10,
+                      top: groundY - 380 - 200,
+                      child: IgnorePointer(
+                        child: _SearchLight(
+                          length: 320,
+                          baseWidth: 90,
+                          color: Colors.yellowAccent,
+                          phase: tx * 0.0003,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: (tx + 80) - cameraOffset * 0.10,
+                      top: groundY - 380 - 200,
+                      child: IgnorePointer(
+                        child: _SearchLight(
+                          length: 300,
+                          baseWidth: 80,
+                          color: Colors.cyanAccent,
+                          phase: 1.2 + tx * 0.00037,
+                        ),
+                      ),
+                    ),
+                  ],
+                // Skyline da cidade (prédios em duas camadas + prédio TerlineT)
+                if (currentLevel.emojiCategory == 'cidade') ...[
+                  // Camada distante
+                  for (final b in _cityBuildingsFar)
+                    Positioned(
+                      left: b.x - cameraOffset * 0.08,
+                      top: groundY - b.height - 80,
+                      child: Container(
+                        width: b.width,
+                        height: b.height,
+                        decoration: BoxDecoration(
+                          color: b.color.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                  // Camada próxima
+                  for (final b in _cityBuildingsNear)
+                    Positioned(
+                      left: b.x - cameraOffset * 0.14,
+                      top: groundY - b.height - 30,
+                      child: Container(
+                        width: b.width,
+                        height: b.height,
+                        decoration: BoxDecoration(
+                          color: b.color,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                  // Renderiza prédios TerlineT na camada próxima do skyline (maiores)
+                  for (final tx in _terlineTBuildingXs)
+                    Positioned(
+                      left: tx - cameraOffset * 0.14,
+                      top: groundY - 380,
+                      child: TerlineTBuilding(width: 320, height: 380),
+                    ),
+                ],
+                // Dunas (parallax) quando deserto
+                if (currentLevel.emojiCategory == 'deserto')
+                  ...[
+                    for (double x = 0; x < worldLength + 800; x += 360)
+                      Positioned(
+                        left: x - cameraOffset * 0.10,
+                        top: groundY - 240,
+                        child: const HillWidget(
+                          color: Color(0xFFE6C78E),
+                          scale: 1.2,
+                        ),
+                      ),
+                    for (double x = 0; x < worldLength + 800; x += 420)
+                      Positioned(
+                        left: x - cameraOffset * 0.18,
+                        top: groundY - 200,
+                        child: const HillWidget(
+                          color: Color(0xFFC9A56A),
+                          scale: 1.1,
+                        ),
+                      ),
+                  ],
+                // Chão (gradiente por fase)
+                Positioned(
+                  left: -cameraOffset,
+                  top: groundY,
+                  child: Container(
+                    width: worldLength,
+                    height: screenHeight - groundY,
+                    decoration: BoxDecoration(
+                      gradient: currentLevel.emojiCategory == 'deserto'
+                          ? const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFFEED9A6),
+                          Color(0xFFDAB77E),
+                        ],
+                      )
+                          : (currentLevel.emojiCategory == 'cidade'
+                          ? const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0xFF424242),
+                          Color(0xFF212121),
+                        ],
+                      )
+                          : (currentLevel.emojiCategory == 'espiritos'
+                          ? const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black, Color(0xFF18181C)],
+                      )
+                          : LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.green.shade600,
+                          Colors.green.shade800,
+                        ],
+                      ))),
+                    ),
+                  ),
+                ),
+                // Lagos (água nos buracos) - desenhar antes das plataformas (não na cidade)
+                if (currentLevel.emojiCategory != 'cidade')
+                  for (final h in _holes)
+                    Positioned(
+                      left: h.startX - cameraOffset,
+                      top: groundY,
+                      child: Container(
+                        width: (h.endX - h.startX),
+                        height: screenHeight - groundY,
+                        decoration: BoxDecoration(
+                          gradient: currentLevel.emojiCategory == 'deserto'
+                              ? const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xFFE6C78E),
+                              Color(0xFFC9A56A),
+                            ],
+                          )
+                              : LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.blueAccent.withOpacity(0.75),
+                              Color(0xFF303F9F).withOpacity(0.9),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                // Superfície da água (linha mais clara)
+                if (currentLevel.emojiCategory != 'deserto' &&
+                    currentLevel.emojiCategory != 'cidade')
+                  for (final h in _holes)
+                    Positioned(
+                      left: h.startX - cameraOffset,
+                      top: groundY - 2,
+                      child: Container(
+                        width: (h.endX - h.startX),
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.lightBlueAccent.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.lightBlueAccent.withOpacity(0.6),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                // Criaturas dos lagos (emojis boiando) — não na cidade
+                if (currentLevel.emojiCategory != 'cidade')
+                  for (final c in _lakeCreatures)
+                    Positioned(
+                      left: c.x - cameraOffset - 14,
+                      top: (c.baseY + sin(nowMs * 0.004 + c.phase) * c.amp) -
+                          14,
+                      child: Transform.scale(
+                        scale: c.scale,
+                        child: Text(
+                            c.emoji, style: const TextStyle(fontSize: 28)),
+                      ),
+                    ),
+                // Plataformas (mantidas para colisão; não desenhadas na cidade)
+                if (currentLevel.emojiCategory != 'cidade')
+                  for (final platform in platforms)
+                    if ((platform.right - cameraOffset) > -50 &&
+                        (platform.left - cameraOffset) < screenWidth + 50)
+                      Positioned(
+                        left: platform.left - cameraOffset,
+                        top: platform.top,
+                        child: Container(
+                          width: platform.width,
+                          height: platform.height,
+                          decoration: BoxDecoration(
+                            color: currentLevel.emojiCategory == 'deserto'
+                                ? const Color(0xFFD2B48C)
+                                : Colors.green.shade700,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                // Troncos (obstáculos da fase Plantas)
+                if (currentLevel.emojiCategory == 'plantas')
+                  for (final log in _logs)
+                    Positioned(
+                      left: log.x - cameraOffset,
+                      top: log.yTop,
+                      child: Container(
+                        width: log.width,
+                        height: log.height,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFFA1887F), Color(0xFF6D4C41)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: Colors.brown.shade200.withOpacity(0.8),
+                              borderRadius: const BorderRadius.vertical(
+                                  top: Radius
+                                      .circular(6)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                // Túmulos (obstáculos da fase dos espíritos)
+                if (currentLevel.emojiCategory == 'espiritos')
+                  for (final log in _logs)
+                    Positioned(
+                      left: log.x - cameraOffset,
+                      top: log.yTop,
+                      child: Container(
+                        width: log.width,
+                        height: log.height,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFF444448), Color(0xFF222225)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.40),
+                              blurRadius: 12,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text('⚰️', style: TextStyle(fontSize: log
+                              .height * 0.7)), // Emoji de túmulo
+                        ),
+                      ),
+                    ),
+                // Faixas da pista (tracejadas) para cidade
+                if (currentLevel.emojiCategory == 'cidade')
+                  ...[
+                    for (double x = 0; x < worldLength; x += 60)
+                      Positioned(
+                        left: x - cameraOffset,
+                        top: groundY + 26,
+                        child: Container(
+                          width: 32,
+                          height: 4,
+                          color: Colors.amberAccent.withOpacity(0.9),
+                        ),
+                      ),
+                    for (double x = 30; x < worldLength; x += 60)
+                      Positioned(
+                        left: x - cameraOffset,
+                        top: groundY + 58,
+                        child: Container(
+                          width: 32,
+                          height: 4,
+                          color: Colors.amberAccent.withOpacity(0.9),
+                        ),
+                      ),
+                  ],
+                // Moedas
+                for (final entry in coins
+                    .asMap()
+                    .entries)
+                  if (!collectedCoins.contains(entry.key))
+                    Positioned(
+                      left: entry.value.dx - cameraOffset - 10,
+                      top: entry.value.dy - 10,
+                      child: Transform.scale(
+                        scale: 0.9 + 0.15 * sin((nowMs * 0.008) + entry.key),
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const RadialGradient(
+                              colors: [Colors.amber, Colors.orange],
+                              stops: [0.3, 1.0],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.orange.withOpacity(0.6),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                // Inimigos da fase (emojis por categoria)
+                for (final b in bees)
+                  Positioned(
+                    left: b.x - cameraOffset - 24,
+                    top: b.currentY - 12,
+                    child: BeeWidget(
+                        scale: 1.0, facingRight: b.dir >= 0, emoji: b.emoji),
+                  ),
+                // Carros da cidade
+                if (currentLevel.emojiCategory == 'cidade')
+                  for (final car in _cars)
+                    Positioned(
+                      left: car.x - cameraOffset,
+                      top: car.yTop,
+                      child: CarWidget(emoji: car.emoji, scale: 1.0),
+                    ),
+                // ====== Fase das aves: renderização dos ovos gigantes ======
+                // O ovo gigante é desenhado ampliando o emoji 🥚 e adicionando rotação para simular "rolagem".
+                // Ele ocupa espaço considerável no chão, bloqueando a passagem.
+                if (currentLevel.emojiCategory == 'aves')
+                  for (final egg in _giantEggs)
+                    Positioned(
+                      left: egg.x - cameraOffset,
+                      top: egg.y,
+                      child: Transform.rotate(
+                        angle: egg.rollingPhase * 0.28, // rotação animada
+                        child: SizedBox(
+                          width: egg.width,
+                          height: egg.height,
+                          child: Center(
+                            child: Text(
+                              egg.emoji, // emoji de ovo ampliado
+                              style: TextStyle(fontSize: egg.height * 0.95),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                // Personagem
+                Positioned(
+                  left: playerX - cameraOffset,
+                  top: playerY,
+                  child: _buildPlayer(),
+                ),
+                // Meta
+                Positioned(
+                  left: goalX - cameraOffset - 8,
+                  top: groundY - 90,
+                  child: const GoalWidget(height: 90),
+                ),
+                // Partículas
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: CustomPaint(
+                    painter: _ParticlePainter(
+                      particles: _particleSystem.particles,
+                      cameraOffset: cameraOffset,
+                    ),
+                    size: Size(screenWidth, screenHeight),
+                  ),
+                ),
+                // UI
+                Positioned(
+                  top: 30,
+                  left: 20,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Pontuação
+                      Text(
+                        'Pontos: $score',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 4,
+                              color: Colors.black,
+                              offset: Offset(2, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Moedas
+                      Text(
+                        'Moedas: $coinsCollected',
+                        style: const TextStyle(
+                          color: Colors.amber,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 4,
+                              color: Colors.black,
+                              offset: Offset(2, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Saldo Bubble Coin
+                      Row(
+                        children: [
+                          Image.asset(
+                              'assets/icon_bolhas.png', width: 24, height: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            balance.toStringAsFixed(8),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Indicador de fase no canto superior direito
+                Positioned(
+                  top: 30,
+                  right: 20,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                        horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.deepOrangeAccent,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        ),
-                      ],
+                      color: Colors.black.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '$lastEmojiAwarded +1 BUBBLE',
+                      'Fase ${levelIndex + 1}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -2893,76 +3290,124 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
                     ),
                   ),
                 ),
-              ),
-
-            if (showSolBadge)
-              Positioned(
-                top: 150,
-                left: screenWidth / 2 - 120,
-                child: AnimatedOpacity(
-                  opacity: solBadgeOpacity,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.purpleAccent,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 10,
-                          spreadRadius: 2,
+                // Badges de recompensa
+                if (showEmojiBadge)
+                  Positioned(
+                    top: 100,
+                    left: screenWidth / 2 - 100,
+                    child: AnimatedOpacity(
+                      opacity: emojiBadgeOpacity,
+                      duration: const Duration(milliseconds: 300),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.deepOrangeAccent,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            ),
+                          ],
                         ),
-                      ],
+                        child: Text(
+                          '$lastEmojiAwarded +1 BUBBLE',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
-                    child: const Text(
-                      'SOLANA POP! +0.0000001 SOL',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                  ),
+                if (showSolBadge)
+                  Positioned(
+                    top: 150,
+                    left: screenWidth / 2 - 120,
+                    child: AnimatedOpacity(
+                      opacity: solBadgeOpacity,
+                      duration: const Duration(milliseconds: 300),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.purpleAccent,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: const Text(
+                          'SOLANA POP! +0.0000001 SOL',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Controles móveis
+                if (defaultTargetPlatform == TargetPlatform.android ||
+                    defaultTargetPlatform == TargetPlatform.iOS)
+                  _buildMobileControls(),
+                // Telas de estado
+                if (isGameOver) _buildGameOverOverlay(),
+                if (isLevelComplete) _buildLevelCompleteOverlay(),
+                // Tela de introdução (sobrepõe tudo até o usuário iniciar)
+                if (_showIntro) Positioned.fill(child: _buildIntroOverlay()),
+                // Mãozinha de voltar (sempre por cima)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: SafeArea(
+                    child: GestureDetector(
+                      onTap: () => Navigator.maybePop(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Text('👈', style: TextStyle(fontSize: 24)),
                       ),
                     ),
                   ),
                 ),
-              ),
-
-            // Controles móveis
-            if (defaultTargetPlatform == TargetPlatform.android ||
-                defaultTargetPlatform == TargetPlatform.iOS)
-              _buildMobileControls(),
-
-            // Telas de estado
-            if (isGameOver) _buildGameOverOverlay(),
-            if (isLevelComplete) _buildLevelCompleteOverlay(),
-
-            // Tela de introdução (sobrepõe tudo até o usuário iniciar)
-            if (_showIntro) Positioned.fill(child: _buildIntroOverlay()),
-
-            // Mãozinha de voltar (sempre por cima)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: SafeArea(
-                child: GestureDetector(
-                  onTap: () => Navigator.maybePop(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Text('👈', style: TextStyle(fontSize: 24)),
-                  ),
-                ),
-              ),
-            ),
+              ],
+            if (!widget.demoMode) ...[
+              if (isGameOver) _buildGameOverOverlay(),
+              if (isLevelComplete) _buildLevelCompleteOverlay(),
+              if (_showIntro) Positioned.fill(child: _buildIntroOverlay()),
+              if (defaultTargetPlatform == TargetPlatform.android ||
+                  defaultTargetPlatform == TargetPlatform.iOS)
+                _buildMobileControls(),
+            ]
+            // Se demoMode, overlays nunca aparecem (mantenha só cenário, player, HUD)
           ],
         ),
       ),
     );
+    if (widget.demoMode) {
+      return FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: 120,
+          height: 150,
+          child: SizedBox.expand(child: visualContent),
+        ),
+      );
+    }
+    return visualContent;
   }
 
   Widget _buildIntroOverlay() {
@@ -3670,4 +4115,36 @@ class _CityBuilding {
     required this.height,
     required this.color,
   });
+}
+
+// ====================== AVES: OVOS GIGANTES ======================
+// ==========
+// Classe auxiliar para ovos gigantes das aves.
+// - x, y: posição atual no mundo.
+// - width, height: tamanho do ovo (ampliado para desafio visual).
+// - speed: velocidade de rolagem (positivo = direita, negativo = esquerda).
+// - emoji: emoji 🥚 (pode trocar por renderização mais complexa se desejado).
+// - rollingPhase: controla rotação e flutuação animada.
+// - rect: caixa de colisão (usada na checagem de Game Over).
+// ==========
+class _GiantEgg {
+  double x;
+  double y;
+  double width;
+  double height;
+  double speed;
+  String emoji;
+  double rollingPhase;
+
+  _GiantEgg({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.speed,
+    required this.emoji,
+    required this.rollingPhase,
+  });
+
+  Rect get rect => Rect.fromLTWH(x, y, width, height);
 }

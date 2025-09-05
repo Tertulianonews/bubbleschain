@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/pepe_logo.dart';
-import 'login_screen.dart'; // Adicionei este import
+import 'bubbles_home_screen.dart'; // Importar BubblesHomeScreen em vez de LoginScreen
 
 class AccountVerifiedScreen extends StatelessWidget {
   const AccountVerifiedScreen({Key? key}) : super(key: key);
@@ -53,9 +53,9 @@ class AccountVerifiedScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold, fontSize: 16)),
                 // Alteração importante aqui:
                 onPressed: () => Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => LoginScreen())
+                    MaterialPageRoute(builder: (_) => BubblesHomeScreen())
                 ),
-                child: Text("Ir para o login"),
+                child: Text("Entrar no Bubbles"),
               ),
             ],
           ),

@@ -10,6 +10,7 @@ import 'dart:async';
 import 'screens/reset_password_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'screens/account_verified_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,20 +19,6 @@ void main() async {
     anonKey: 'sb_publishable_4UmDtWDPUSZ8YtgFYaH97w_XXKyMG40',
   );
   runApp(const PepeChatApp());
-}
-
-class AuthRedirector extends StatelessWidget {
-  const AuthRedirector({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session != null && session.user != null) {
-      return const BubblesHomeScreen();
-    } else {
-      return const LoginScreen();
-    }
-  }
 }
 
 class PepeChatApp extends StatelessWidget {
@@ -105,9 +92,18 @@ class _PepeChatAppRootState extends State<_PepeChatAppRoot> {
       debugShowCheckedModeBanner: false,
       title: 'Bubbles',
       theme: quantumTheme,
+      // Configurações para melhor comportamento com redimensionamento
+      builder: (context, child) {
+        return MediaQuery(
+          // Previne que fontes sejam escalonadas automaticamente pelo sistema
+          data: MediaQuery.of(context).copyWith(textScaleFactor: 1.0),
+          child: child!,
+        );
+      },
       routes: {
-        '/': (_) => const AuthRedirector(),
+        '/': (_) => const BubblesHomeScreen(),
         '/bubbles': (_) => const BubblesHomeScreen(),
+        '/splash': (_) => const SplashScreen(),
       },
       onGenerateRoute: (kIsWeb ? _handleWebRoute : null),
     );

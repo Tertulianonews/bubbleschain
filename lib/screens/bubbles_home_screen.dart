@@ -1,14 +1,26 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
+
+// Timer is used in this file. dart:async import ensures Timer works.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'profile_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'bubble_game_screen.dart';
 import 'package:http/http.dart' as http;
-import 'terlinet_word_screen.dart'; // Importação adicionada
+import 'terlinet_word_screen.dart';
+import 'channels_screen.dart';
+import '../theme.dart';
+import '../widgets/live_video_widget.dart';
+import '../widgets/live_preview_widget.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'register_screen.dart';
+import 'terms_privacy_screen.dart';
+import '../widgets/pepe_logo.dart';
 
 class UserBubble {
   final String id;
@@ -22,6 +34,8 @@ class UserBubble {
   Color color;
   bool hasNotification;
   final bool isSocial;
+  bool isLive;
+  String? liveChannel;
 
   UserBubble({
     required this.id,
@@ -35,6 +49,8 @@ class UserBubble {
     required this.color,
     this.hasNotification = false,
     this.isSocial = false,
+    this.isLive = false,
+    this.liveChannel,
   });
 }
 
@@ -210,6 +226,11 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
   bool isSearching = false;
   final TransformationController _centerController = TransformationController();
 
+  bool get isLoggedIn {
+    final user = Supabase.instance.client.auth.currentUser;
+    return user != null;
+  }
+
   Future<Set<String>> _buscarNotificantes() async {
     try {
       final res = await Supabase.instance.client
@@ -276,7 +297,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       b.y += b.dy + offset.dy;
 
       double drawSize = b.size * 0.65;
-      if (b.id == 'game_bubble' || b.id == 'terlinet_word')
+      if (b.id == 'game_bubble' || b.id == 'terlinet_word' ||
+          b.id == 'bitcoin_bubble' || b.id == 'canais_bubble')
         drawSize = b.size * 1.18;
       else if (isSearching && bubblesFiltered.isNotEmpty && bubblesFiltered.first.id == b.id) {
         drawSize = b.size * 1.55;
@@ -294,12 +316,14 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         final dist = sqrt(dxBubbles * dxBubbles + dyBubbles * dyBubbles);
 
         double bDrawSize = b.size * 0.65;
-        if (b.id == 'game_bubble' || b.id == 'terlinet_word')
+        if (b.id == 'game_bubble' || b.id == 'terlinet_word' ||
+            b.id == 'bitcoin_bubble' || b.id == 'canais_bubble')
           bDrawSize = b.size * 1.18;
         else if (isSearching && bubblesFiltered.isNotEmpty && bubblesFiltered.first.id == b.id) bDrawSize = b.size * 1.55;
 
         double oDrawSize = o.size * 0.65;
-        if (o.id == 'game_bubble' || o.id == 'terlinet_word')
+        if (o.id == 'game_bubble' || o.id == 'terlinet_word' ||
+            o.id == 'bitcoin_bubble' || o.id == 'canais_bubble')
           oDrawSize = o.size * 1.18;
         else if (isSearching && bubblesFiltered.isNotEmpty && bubblesFiltered.first.id == o.id) oDrawSize = o.size * 1.55;
 
@@ -341,7 +365,10 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     try {
       final resposta = await Supabase.instance.client
           .from('users')
-          .select('id, nickname, avatar_url');
+          .select('id, nickname, avatar_url, is_live, live_channel');
+
+      print("[DEBUG] Dados recebidos do Supabase: ${resposta.length} usuários");
+
       final outros = resposta.where((u) => u['id'] != currentUserId).toList();
       final Random rand = Random();
       final notificantes = await _buscarNotificantes();
@@ -363,7 +390,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         } catch (_) {}
         novas.add(UserBubble(
           id: app['id'] as String,
-          name: (app['id'] as String).capitalize(),
+          name: app['name'] ?? (app['id'] as String).capitalize(),
           avatarUrl: app['avatar_url'] ?? '',
           x: startX + stepX * added,
           y: startY,
@@ -376,8 +403,18 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         added++;
       }
 
+      int liveCount = 0;
       for (int i = 0; i < outros.length; i++) {
         final u = outros[i];
+        final bool isLive = u['is_live'] == true;
+        final String? liveChannel = u['live_channel'];
+
+        if (isLive) {
+          liveCount++;
+          print(
+              "[DEBUG] Usuário ao vivo encontrado: ${u['nickname']} (${u['id']}) - Canal: $liveChannel");
+        }
+
         final baseHue = 205 + ((i * 21) % 140);
         final color = HSVColor.fromAHSV(1, baseHue.toDouble(), 0.65, 0.94).toColor();
         novas.add(UserBubble(
@@ -391,9 +428,17 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           size: 44 + rand.nextDouble() * 11,
           color: color,
           hasNotification: notificantes.contains(u['id']),
+          isLive: isLive,
+          liveChannel: liveChannel,
         ));
         _loadAvatarImage(novas.last);
       }
+
+      print("[DEBUG] Total de usuários ao vivo: $liveCount");
+
+      // Definir contagem atual de usuários
+      _lastUserCount = outros.length;
+
       if (mounted) {
         setState(() {
           bubbles = novas;
@@ -423,6 +468,37 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
               dy: 0,
               size: 60,
               color: Colors.blueAccent,
+              isSocial: true,
+            ),
+          );
+          // Adiciona a bolha do Bitcoin (nova bolha social fixa)
+          bubbles.add(
+            UserBubble(
+              id: 'bitcoin_bubble',
+              name: '₿ Bitcoin',
+              avatarUrl: '',
+              x: 0.81,
+              y: 0.55,
+              dx: 0,
+              dy: 0,
+              size: 60,
+              color: Color(0xFFF7931A),
+              // Cor laranja ouro oficial Bitcoin
+              isSocial: true,
+            ),
+          );
+          // Adiciona a bolha CANAIS (nova bolha especial)
+          bubbles.add(
+            UserBubble(
+              id: 'canais_bubble',
+              name: 'CANAIS',
+              avatarUrl: '',
+              x: 0.81,
+              y: 0.65,
+              dx: 0,
+              dy: 0,
+              size: 60,
+              color: Colors.greenAccent,
               isSocial: true,
             ),
           );
@@ -465,19 +541,127 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     }
   }
 
+  int _lastUserCount = 0;
+
+  Future<void> _checkForNewUsers() async {
+    try {
+      final resposta = await Supabase.instance.client
+          .from('users')
+          .select('id')
+          .neq('id', currentUserId);
+
+      final currentCount = resposta.length;
+
+      if (currentCount != _lastUserCount) {
+        print(
+            "[DEBUG] Detectados novos usuários: $_lastUserCount -> $currentCount. Recarregando bolhas.");
+        _lastUserCount = currentCount;
+        await _loadAllUsersBubbles();
+      }
+    } catch (e) {
+      print("[DEBUG] Erro em _checkForNewUsers: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     final user = Supabase.instance.client.auth.currentUser;
     currentUserId = user?.id ?? '';
     print("[DEBUG initState] currentUserId definido como: '$currentUserId'");
-    _carregarMeuPerfil();
+
+    // Adicionar listener para mudanças de autenticação
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      final User? newUser = data.session?.user;
+      print("[DEBUG] Auth state changed: $event, user: ${newUser?.id}");
+
+      if (event == AuthChangeEvent.signedIn && newUser != null) {
+        if (mounted) {
+          setState(() {
+            currentUserId = newUser.id;
+            print("[DEBUG] User signed in: $currentUserId");
+          });
+          _carregarMeuPerfil();
+          _loadAllUsersBubbles();
+        }
+      } else if (event == AuthChangeEvent.signedOut) {
+        if (mounted) {
+          setState(() {
+            currentUserId = '';
+            currentUserName = '';
+            currentUserAvatar = '';
+            profileLoaded = false;
+            print("[DEBUG] User signed out");
+          });
+        }
+      }
+    });
+
+    if (currentUserId.isNotEmpty) {
+      _carregarMeuPerfil();
+    }
     bubbles = [];
     controller = AnimationController(vsync: this, duration: const Duration(days: 9999))
       ..addListener(_moveBubblesPhysics)
       ..repeat(period: const Duration(milliseconds: 30));
     _loadAllUsersBubbles();
+
+    // Timer para atualizar status de live a cada 15 segundos (mais rápido)
+    Timer.periodic(const Duration(seconds: 15), (timer) {
+      if (mounted) {
+        _updateLiveStatus();
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // Timer para verificar novos usuários a cada 60 segundos (menos frequente)
+    Timer.periodic(const Duration(seconds: 60), (timer) {
+      if (mounted) {
+        _checkForNewUsers();
+      } else {
+        timer.cancel();
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final gameBubble = bubbles.firstWhere(
+            (bubble) => bubble.id == 'game_bubble',
+        orElse: () =>
+            UserBubble(
+              id: '',
+              name: '',
+              avatarUrl: '',
+              x: 0.5,
+              y: 0.5,
+              dx: 0,
+              dy: 0,
+              size: 50,
+              color: Colors.transparent,
+            ),
+      );
+      if (gameBubble.id != '') {
+        setState(() {
+          _gameBubble = gameBubble;
+          _showDemoPreview = true;
+        });
+      }
+    });
   }
+
+  bool _showDemoPreview = false;
+  late UserBubble _gameBubble = UserBubble(
+    id: '',
+    name: '',
+    avatarUrl: '',
+    x: 0.5,
+    y: 0.5,
+    dx: 0,
+    dy: 0,
+    size: 50,
+    color: Colors.transparent,
+  );
 
   @override
   void dispose() {
@@ -489,6 +673,16 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
   void _onBubbleTap(UserBubble user) async {
     print("[DEBUG] _onBubbleTap chamado para: ${user.name} (ID: ${user.id})");
+    // Abrir tela de canais se for canais_bubble
+    if (user.id == 'canais_bubble') {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ChannelsScreen()),
+      );
+      return;
+    }
+
     try {
       final social = await Supabase.instance.client
           .from('socialBubbles')
@@ -514,6 +708,22 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       return;
     }
 
+
+    if (user.isLive) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              LiveVideoWidget(
+                channelName: user.liveChannel ?? 'live_${user.id}',
+                userId: currentUserId,
+                isHost: false, // Como viewer
+              ),
+        ),
+      );
+      return;
+    }
+
     print("[DEBUG] Navegando para ChatScreen com ${user.name}");
     if (!mounted) return;
     await Navigator.push(
@@ -526,15 +736,19 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         ),
       ),
     );
-    _loadAllUsersBubbles();
+    // Atualizar apenas status de live após voltar do chat
+    _updateLiveStatus();
   }
 
-  void _onMyProfileTap() {
+  void _onMyProfileTap() async {
     print("[DEBUG _onMyProfileTap] CLICOU NA BOLHA DO PERFIL!");
     print("[DEBUG _onMyProfileTap] currentUserId antes de navegar: '$currentUserId'");
     if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(
+    await Navigator.push(context, MaterialPageRoute(
         builder: (_) => ProfileSetupScreen(userIdOverride: currentUserId)));
+
+    // Atualizar status de live após voltar do perfil (pode ter iniciado/parado live)
+    _updateLiveStatus();
   }
 
   List<UserBubble> get bubblesFiltered {
@@ -580,189 +794,738 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     if (mounted) setState(() {});
   }
 
+  // Método para atualizar apenas status de live sem reorganizar bolhas
+  Future<void> _updateLiveStatus() async {
+    print(
+        "[DEBUG] _updateLiveStatus chamado - atualizando apenas status de live");
+    try {
+      final resposta = await Supabase.instance.client
+          .from('users')
+          .select('id, is_live, live_channel');
+
+      final liveUsersMap = <String, Map<String, dynamic>>{};
+      for (final user in resposta) {
+        liveUsersMap[user['id']] = {
+          'is_live': user['is_live'] == true,
+          'live_channel': user['live_channel'],
+        };
+      }
+
+      int liveCount = 0;
+      bool hasChanges = false;
+
+      for (final bubble in bubbles) {
+        if (liveUsersMap.containsKey(bubble.id)) {
+          final userData = liveUsersMap[bubble.id]!;
+          final wasLive = bubble.isLive;
+          final isNowLive = userData['is_live'] as bool;
+
+          if (wasLive != isNowLive) {
+            hasChanges = true;
+            bubble.isLive = isNowLive;
+            bubble.liveChannel = userData['live_channel'];
+
+            if (isNowLive) {
+              liveCount++;
+              print("[DEBUG] Usuário ${bubble.name} iniciou live");
+            } else {
+              print("[DEBUG] Usuário ${bubble.name} parou live");
+            }
+          } else if (isNowLive) {
+            liveCount++;
+          }
+        }
+      }
+
+      print("[DEBUG] Total de usuários ao vivo: $liveCount");
+
+      if (hasChanges && mounted) {
+        setState(() {
+          // Apenas atualizar UI, bolhas mantêm posições
+        });
+      }
+    } catch (e) {
+      print("[DEBUG] Erro em _updateLiveStatus: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.of(context).size.width;
     final h = MediaQuery.of(context).size.height;
+    final bool loggedIn = isLoggedIn;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset(
-              'assets/gifmaster.gif',
-              fit: BoxFit.cover,
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Container(
-                height: kTopBarHeight,
-                child: Row(
-                  children: [
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: _onMyProfileTap,
-                      child: profileLoaded && currentUserAvatar.isNotEmpty
-                          ? CircleAvatar(
-                        radius: 25,
-                        backgroundImage: NetworkImage(currentUserAvatar),
-                        onBackgroundImageError: (exception, stackTrace) {
-                          print("[DEBUG] Erro ao carregar avatar: $exception");
-                          if (mounted) setState(() {});
-                        },
-                      )
-                          : CircleAvatar(
-                          radius: 25,
-                          child: profileLoaded
-                              ? const Icon(Icons.person, size: 30)
-                              : const CircularProgressIndicator(strokeWidth: 2)
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(currentUserName.isNotEmpty ? currentUserName : "Carregando...",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 17,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                    IconButton(
-                      icon: const Text('🔎', style: TextStyle(fontSize: 24)),
-                      onPressed: () {
-                        if (!mounted) return;
-                        setState(() {
-                          if (isSearching) {
-                            searchText = '';
-                            _searchController.clear();
-                            isSearching = false;
-                          } else {
-                            isSearching = true;
-                          }
-                          _centralizarBolhaPesquisadaV2();
-                        });
-                      },
-                    ),
-                  ],
-                ),
+      resizeToAvoidBottomInset: false,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Background
+            Positioned.fill(
+              child: Image.asset(
+                'assets/gifmaster.gif',
+                fit: BoxFit.cover,
               ),
             ),
-          ),
-          if (isSearching)
-            Positioned(
-              top: kTopBarHeight,
-              left: 0,
-              right: 0,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Material(
-                  color: Colors.transparent,
-                  child: Container(
-                    height: kSearchBarHeight,
-                    alignment: Alignment.center,
-                    child: TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        cursorColor: Colors.cyanAccent,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
-                          fillColor: Colors.white.withOpacity(0.04),
-                          filled: true,
-                          hintText: 'Pesquisar usuário/bolha...',
-                          hintStyle: const TextStyle(color: Colors.white54),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(32),
-                            borderSide: BorderSide.none,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: const Text('🔎', style: TextStyle(fontSize: 22)),
-                            onPressed: () {
-                              if (!mounted) return;
-                              setState(() {
-                                _centralizarBolhaPesquisadaV2();
-                              });
-                            },
-                          ),
+
+            // Top bar com perfil e busca
+            if (loggedIn)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: kTopBarHeight,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _onMyProfileTap,
+                        child: profileLoaded && currentUserAvatar.isNotEmpty
+                            ? CircleAvatar(
+                          radius: 25,
+                          backgroundImage: NetworkImage(currentUserAvatar),
+                          onBackgroundImageError: (exception, stackTrace) {
+                            print(
+                                "[DEBUG] Erro ao carregar avatar: $exception");
+                            if (mounted) setState(() {});
+                          },
+                        )
+                            : CircleAvatar(
+                            radius: 25,
+                            child: profileLoaded
+                                ? const Icon(Icons.person, size: 30)
+                                : const CircularProgressIndicator(
+                                strokeWidth: 2)
                         ),
-                        onChanged: (v) {
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(currentUserName.isNotEmpty
+                            ? currentUserName
+                            : "Carregando...",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 17,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      IconButton(
+                        icon: const Text('🔎', style: TextStyle(fontSize: 24)),
+                        onPressed: () {
                           if (!mounted) return;
                           setState(() {
-                            searchText = _searchController.text;
+                            if (isSearching) {
+                              searchText = '';
+                              _searchController.clear();
+                              isSearching = false;
+                            } else {
+                              isSearching = true;
+                            }
                             _centralizarBolhaPesquisadaV2();
                           });
-                        }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (!loggedIn)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SizedBox(height: kTopBarHeight),
+              ),
+
+            // Barra de pesquisa
+            if (loggedIn && isSearching)
+              Positioned(
+                top: kTopBarHeight,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      height: kSearchBarHeight,
+                      alignment: Alignment.center,
+                      child: TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          cursorColor: Colors.cyanAccent,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(
+                                vertical: 10.0, horizontal: 15.0),
+                            fillColor: Colors.white.withOpacity(0.04),
+                            filled: true,
+                            hintText: 'Pesquisar usuário/bolha...',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(32),
+                              borderSide: BorderSide.none,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: const Text(
+                                  '🔎', style: TextStyle(fontSize: 22)),
+                              onPressed: () {
+                                if (!mounted) return;
+                                setState(() {
+                                  _centralizarBolhaPesquisadaV2();
+                                });
+                              },
+                            ),
+                          ),
+                          onChanged: (v) {
+                            if (!mounted) return;
+                            setState(() {
+                              searchText = _searchController.text;
+                              _centralizarBolhaPesquisadaV2();
+                            });
+                          }
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          Positioned.fill(
-            top: kTopBarHeight + (isSearching ? kSearchBarHeight : 0.0),
-            child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTapUp: (details) {
-                      if (!mounted) return;
-                      final tapPos = details.localPosition;
+            if (!loggedIn)
+              Positioned(
+                top: kTopBarHeight,
+                left: 0,
+                right: 0,
+                child: SizedBox(height: kSearchBarHeight),
+              ),
 
-                      final List<UserBubble> listToCheck = bubblesFiltered.isEmpty ? bubbles : bubblesFiltered;
-
-                      for (final bubble in List.from(listToCheck).reversed) {
-                        final bool isSpecial = bubble.id == 'game_bubble' ||
-                            bubble.id == 'terlinet_word';
-                        double baseSize = isSpecial ? 60.0 : bubble.size;
-                        bool isSearchedForThisBubble = isSearching &&
-                            bubblesFiltered.isNotEmpty &&
-                            bubblesFiltered.first.id == bubble.id;
-                        if (isSpecial) isSearchedForThisBubble = false;
-
-                        double drawSize = isSpecial
-                            ? baseSize * 1.18
-                            : baseSize * 0.65;
-                        if (isSearchedForThisBubble && !isSpecial)
-                          drawSize = baseSize * 1.55;
-
-                        final double painterCenterX = bubble.x * constraints.maxWidth;
-                        final double painterCenterY = bubble.y * constraints.maxHeight;
-                        final Offset bubblePainterCenter = Offset(painterCenterX, painterCenterY);
-
-                        final raio = drawSize / 2;
-                        final dist = (tapPos - bubblePainterCenter).distance;
-
-                        if (dist <= raio) {
-                          print('[DEBUG] Bolha ${bubble.name} TOCADA!');
-                          if (bubble.id == 'game_bubble') {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const BubbleGameScreen(),
-                              ),
-                            );
-                          } else {
-                            _onBubbleTap(bubble);
-                          }
-                          break;
-                        }
-                      }
-                    },
-                    child: CustomPaint(
-                      painter: BubblesPainter(
-                        bubbles: bubbles,
-                        bubblesFiltered: bubblesFiltered,
-                        isSearching: isSearching,
-                        bubbleImages: _bubbleImages,
-                        searchText: searchText,
+            // Preview do game bubble
+            if (loggedIn && _gameBubble.id != '')
+              Positioned(
+                left: _gameBubble.x * w - 60,
+                top: _gameBubble.y * h - 120 + kTopBarHeight +
+                    (isSearching ? kSearchBarHeight : 0.0),
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _showDemoPreview ? 1.0 : 0.0,
+                    duration: Duration(milliseconds: 300),
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: SizedBox(
+                        width: 390,
+                        height: 800,
+                        child: BubbleGameScreen(demoMode: true),
                       ),
-                      child: const SizedBox.expand(),
                     ),
-                  );
-                }
+                  ),
+                ),
+              ),
+
+            // Área principal das bolhas
+            Positioned.fill(
+              top: kTopBarHeight +
+                  (isSearching && loggedIn ? kSearchBarHeight : 0.0),
+              child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final specialIds = ['game_bubble', 'canais_bubble'];
+                    final previews = bubbles
+                        .where((b) => specialIds.contains(b.id))
+                        .map((bubble) {
+                      final double baseSize = 60.0;
+                      final double drawSize = baseSize * 1.18;
+                      double miniWidth = 120;
+                      double miniHeight = 150;
+                      Widget previewWidget;
+                      if (bubble.id == 'game_bubble') {
+                        previewWidget = FittedBox(
+                          fit: BoxFit.contain,
+                          child: SizedBox(
+                            width: 390,
+                            height: 650,
+                            child: BubbleGameScreen(demoMode: true),
+                          ),
+                        );
+                      } else {
+                        previewWidget = const SizedBox();
+                      }
+                      final double centerX = bubble.x * constraints.maxWidth;
+                      final double centerY = bubble.y * constraints.maxHeight;
+                      return Positioned(
+                        left: centerX - miniWidth / 2,
+                        top: centerY - drawSize / 2 - miniHeight - 18,
+                        child: IgnorePointer(
+                          child: SizedBox(
+                            width: miniWidth,
+                            height: miniHeight,
+                            child: previewWidget,
+                          ),
+                        ),
+                      );
+                    }).toList();
+
+                    final livePreviews = bubbles
+                        .where((b) => b.isLive && !specialIds.contains(b.id))
+                        .map((bubble) {
+                      final double baseSize = bubble.size;
+
+                      bool isThisTheSearchedBubble = isSearching &&
+                          bubblesFiltered.isNotEmpty &&
+                          bubblesFiltered.first.id == bubble.id;
+                      double drawSize = baseSize * 0.65;
+                      if (isThisTheSearchedBubble) drawSize = baseSize * 1.55;
+
+                      final double centerX = bubble.x * constraints.maxWidth;
+                      final double centerY = bubble.y * constraints.maxHeight;
+
+                      return Positioned(
+                        left: centerX - 40,
+                        top: centerY - drawSize / 2 - 30,
+                        child: _LiveIndicatorWidget(),
+                      );
+                    }).toList();
+
+                    final canaisTvEmoji = bubbles
+                        .where((b) => b.id == 'canais_bubble')
+                        .map((bubble) {
+                      final double baseSize = 60.0;
+                      final double drawSize = baseSize * 1.18;
+                      final double centerX = bubble.x * constraints.maxWidth;
+                      final double centerY = bubble.y * constraints.maxHeight;
+
+                      return Positioned(
+                        left: centerX - 30,
+                        top: centerY - drawSize / 2 - 45,
+                        child: Container(
+                          width: 60,
+                          alignment: Alignment.center,
+                          child: Text(
+                            "📺",
+                            style: TextStyle(
+                              fontSize: 32,
+                              shadows: [
+                                Shadow(
+                                    blurRadius: 8,
+                                    color: Colors.black,
+                                    offset: Offset(2, 2)
+                                ),
+                                Shadow(
+                                    blurRadius: 15,
+                                    color: Colors.limeAccent.withOpacity(0.7),
+                                    offset: Offset(0, 0)
+                                )
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList();
+
+                    Widget bubblesMainLayer = Stack(
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onPanUpdate: (details) {},
+                          onTapUp: (details) async {
+                            if (!loggedIn) return;
+                            print(details);
+                            if (!mounted) return;
+                            final tapPos = details.localPosition;
+                            final List<UserBubble> listToCheck = bubblesFiltered
+                                .isEmpty ? bubbles : bubblesFiltered;
+                            for (final bubble in List
+                                .from(listToCheck)
+                                .reversed) {
+                              final bool isSpecial = bubble.id ==
+                                  'game_bubble' ||
+                                  bubble.id == 'terlinet_word' ||
+                                  bubble.id == 'bitcoin_bubble' ||
+                                  bubble.id == 'canais_bubble';
+                              double baseSize = isSpecial ? 60.0 : bubble.size;
+
+                              bool isThisTheSearchedBubble = isSearching &&
+                                  bubblesFiltered.isNotEmpty &&
+                                  bubblesFiltered.first.id == bubble.id;
+
+                              double drawSize = isSpecial
+                                  ? baseSize * 1.18
+                                  : baseSize * 0.65;
+                              if (isThisTheSearchedBubble && !isSpecial)
+                                drawSize = baseSize * 1.55;
+
+                              final double painterCenterX = bubble.x *
+                                  constraints.maxWidth;
+                              final double painterCenterY = bubble.y *
+                                  constraints.maxHeight;
+                              final raio = drawSize / 2;
+                              final dist = (tapPos - Offset(
+                                  painterCenterX, painterCenterY))
+                                  .distance;
+                              if (dist <= raio) {
+                                print('[DEBUG] Bolha ${bubble.name} TOCADA!');
+                                if (bubble.id == 'game_bubble') {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const BubbleGameScreen(),
+                                    ),
+                                  );
+                                } else if (bubble.id == 'bitcoin_bubble') {
+                                  await launchUrl(
+                                      Uri.parse('https://bitcoin.org/'));
+                                } else if (bubble.id == 'canais_bubble') {
+                                  if (!mounted) return;
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ChannelsScreen(),
+                                    ),
+                                  );
+                                } else {
+                                  _onBubbleTap(bubble);
+                                }
+                                break;
+                              }
+                            }
+                          },
+                          child: CustomPaint(
+                            painter: BubblesPainter(
+                              bubbles: bubbles,
+                              bubblesFiltered: bubblesFiltered,
+                              isSearching: isSearching,
+                              bubbleImages: _bubbleImages,
+                              searchText: searchText,
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                        ...canaisTvEmoji,
+                        ...previews,
+                        ...livePreviews,
+                      ],
+                    );
+
+                    return bubblesMainLayer;
+                  }
+              ),
+            ),
+
+            // Overlay de login translúcido e bonito
+            if (!loggedIn)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.15),
+                        Colors.black.withOpacity(0.35),
+                        Colors.black.withOpacity(0.25),
+                      ],
+                    ),
+                  ),
+                  child: Center(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: 390),
+                        child: Container(
+                          margin: EdgeInsets.symmetric(horizontal: 28),
+                          padding: EdgeInsets.all(22),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withOpacity(0.08),
+                                Colors.white.withOpacity(0.03),
+                                Colors.white.withOpacity(0.06),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(32),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.25),
+                                blurRadius: 32,
+                                offset: Offset(0, 12),
+                                spreadRadius: 2,
+                              ),
+                              BoxShadow(
+                                color: Colors.cyanAccent.withOpacity(0.1),
+                                blurRadius: 48,
+                                offset: Offset(0, 0),
+                                spreadRadius: -5,
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // LOGO com efeito de brilho
+                              Container(
+                                margin: EdgeInsets.only(bottom: 9),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(50),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.cyanAccent.withOpacity(
+                                          0.25),
+                                      blurRadius: 16,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                                child: const PepeLogo(size: 59),
+                              ),
+
+                              // Saudação inspiradora
+                              Container(
+                                margin: EdgeInsets.only(bottom: 9),
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Column(
+                                  children: [
+                                    ShaderMask(
+                                      shaderCallback: (rect) =>
+                                          LinearGradient(
+                                            colors: [
+                                              Colors.white,
+                                              Colors.cyanAccent.shade100,
+                                              Colors.white,
+                                            ],
+                                          ).createShader(rect),
+                                      child: Text(
+                                        "Bem-vindo ao Bubbles!",
+                                        style: GoogleFonts.orbitron(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 21,
+                                          color: Colors.white,
+                                          letterSpacing: 0.5,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    SizedBox(height: 3),
+                                    Text(
+                                      "O berço de tecnologias disruptivas e ideias inovadoras que transformam o futuro digital",
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                        color: Colors.white.withOpacity(0.82),
+                                        height: 1.25,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Formulário com toggle login/cadastro
+                              _LoginRegisterFormWidget(),
+
+                              SizedBox(height: 6),
+
+                              // Rodapé com referência à TerlineT
+                              Column(
+                                children: [
+                                  // Link para termos
+                                  GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => TermsPrivacyScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: Text(
+                                      "Termos de Uso e Privacidade",
+                                      style: GoogleFonts.orbitron(
+                                        color: Color(0xFF8AC5EC).withOpacity(
+                                            0.7),
+                                        fontSize: 11,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+
+                                  SizedBox(height: 4),
+
+                                  // Divisor sutil
+                                  Container(
+                                    height: 1,
+                                    width: 62,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.white.withOpacity(0.3),
+                                          Colors.transparent,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  SizedBox(height: 5),
+
+                                  // Créditos TerlineT
+                                  Column(
+                                    children: [
+                                      Text(
+                                        "Powered by",
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white.withOpacity(0.5),
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w300,
+                                        ),
+                                      ),
+                                      SizedBox(height: 1),
+                                      ShaderMask(
+                                        shaderCallback: (rect) =>
+                                            LinearGradient(
+                                              colors: [
+                                                Color(0xFF8AC5EC),
+                                                Colors.cyanAccent.shade200,
+                                                Color(0xFF8AC5EC),
+                                              ],
+                                            ).createShader(rect),
+                                        child: Text(
+                                          "TerlineT",
+                                          style: GoogleFonts.orbitron(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: 1),
+                                      Text(
+                                        "Conectando pessoas • Transformando ideias",
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white.withOpacity(0.6),
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w400,
+                                          letterSpacing: 0.25,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Widget para o indicador "AO VIVO" acima das bolhas ao vivo.
+class _LiveIndicatorWidget extends StatefulWidget {
+  const _LiveIndicatorWidget({Key? key}) : super(key: key);
+
+  @override
+  State<_LiveIndicatorWidget> createState() => _LiveIndicatorWidgetState();
+}
+
+class _LiveIndicatorWidgetState extends State<_LiveIndicatorWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFFFF3B30),
+            Color(0xFFFF5252),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF3B30).withOpacity(0.4),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.white.withOpacity(0.6),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, child) {
+              double scale = 1.0 + 0.7 * _pulseController.value;
+              double opacity = 0.62 + 0.38 * (1.0 - _pulseController.value);
+              return Container(
+                width: 7.5 * scale,
+                height: 7.5 * scale,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(opacity),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.88 * opacity),
+                      blurRadius: 6 * scale,
+                      spreadRadius: 1.0 * scale,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'AO VIVO',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              shadows: [
+                Shadow(
+                  color: Colors.black38,
+                  offset: Offset(0, 0.5),
+                  blurRadius: 1,
+                ),
+              ],
             ),
           ),
         ],
@@ -773,6 +1536,761 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
 const double kTopBarHeight = 87.0;
 const double kSearchBarHeight = 67.0;
+
+// Login/Register Toggle widget
+class _LoginRegisterFormWidget extends StatefulWidget {
+  @override
+  State<_LoginRegisterFormWidget> createState() =>
+      _LoginRegisterFormWidgetState();
+}
+
+class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
+    with SingleTickerProviderStateMixin {
+  int _mode = 0; // 0 = login, 1 = cadastro
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
+  bool _isLoading = false;
+  bool _showPassword = false;
+  String? _errorMsg;
+
+  // Animation controller for particle system
+  late AnimationController _particleController;
+
+  @override
+  void initState() {
+    super.initState();
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20), // Elegant slow orbit
+    )
+      ..repeat();
+  }
+
+  // Função para recuperar senha
+  void _showForgotPasswordDialog() async {
+    final TextEditingController emailCtrl = TextEditingController(
+        text: _emailController.text);
+    String? resetMsg;
+    bool resetLoading = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) =>
+          StatefulBuilder(
+            builder: (context, setStateDialog) =>
+                AlertDialog(
+                  backgroundColor: Colors.white.withOpacity(0.95),
+                  title: Text(
+                    "Recuperar senha",
+                    style: GoogleFonts.orbitron(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF8AC5EC),
+                    ),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Informe seu e-mail cadastrado para receber o link de redefinição de senha.',
+                        style: GoogleFonts.orbitron(fontSize: 13),
+                      ),
+                      const SizedBox(height: 15),
+                      TextField(
+                        controller: emailCtrl,
+                        decoration: InputDecoration(
+                          labelText: "Email",
+                          labelStyle: GoogleFonts.orbitron(
+                              color: Color(0xFF8AC5EC)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide(
+                                color: Color(0xFF8AC5EC), width: 2),
+                          ),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      if (resetMsg != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 15),
+                          child: Text(
+                            resetMsg!,
+                            style: GoogleFonts.orbitron(
+                              color: Color(0xFF8AC5EC),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      child: Text(
+                        "Cancelar",
+                        style: GoogleFonts.orbitron(color: Color(0xFF8AC5EC)),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    TextButton(
+                      child: resetLoading
+                          ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF8AC5EC)),
+                        ),
+                      )
+                          : Text(
+                        "Enviar",
+                        style: GoogleFonts.orbitron(color: Color(0xFF8AC5EC)),
+                      ),
+                      onPressed: resetLoading ? null : () async {
+                        setStateDialog(() {
+                          resetLoading = true;
+                          resetMsg = null;
+                        });
+                        const String kResetRedirectUrl = 'https://tertulianonews.github.io/bubbleschain/reset-password';
+                        try {
+                          await Supabase.instance.client.auth
+                              .resetPasswordForEmail(
+                            emailCtrl.text.trim(),
+                            redirectTo: kResetRedirectUrl,
+                          );
+                          setStateDialog(() {
+                            resetMsg =
+                            "Email de redefinição enviado! Verifique sua caixa de entrada.";
+                            resetLoading = false;
+                          });
+                        } catch (e) {
+                          setStateDialog(() {
+                            resetMsg = "Erro: ${e.toString().replaceAll(
+                                RegExp(r'Exception:|SupabaseAuthException:'),
+                                '').trim()}";
+                            resetLoading = false;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+          ),
+    );
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _isLoading = true;
+      _errorMsg = null;
+    });
+
+    try {
+      final res = await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (res.session == null) {
+        setState(() {
+          _errorMsg = "Falha na autenticação. Verifique suas credenciais.";
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMsg = null;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMsg = "Email ou senha inválidos";
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _register() async {
+    setState(() {
+      _isLoading = true;
+      _errorMsg = null;
+    });
+
+    // Validações básicas
+    if (_nameController.text
+        .trim()
+        .isEmpty) {
+      setState(() {
+        _errorMsg = "Por favor, informe um nome público.";
+        _isLoading = false;
+      });
+      return;
+    }
+
+    if (_emailController.text
+        .trim()
+        .isEmpty) {
+      setState(() {
+        _errorMsg = "Por favor, informe um email válido.";
+        _isLoading = false;
+      });
+      return;
+    }
+
+    if (_passwordController.text.length < 6) {
+      setState(() {
+        _errorMsg = "A senha deve ter no mínimo 6 caracteres.";
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final res = await Supabase.instance.client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        emailRedirectTo: 'https://tertulianonews.github.io/bubbleschain/',
+      );
+
+      if (res.user != null) {
+        // Inserir dados adicionais na tabela users
+        try {
+          await Supabase.instance.client.from('users').insert({
+            'id': res.user!.id,
+            'nickname': _nameController.text.trim(),
+            'avatar_url': null,
+            'is_live': false,
+            'live_channel': null,
+          });
+        } catch (e) {
+          print("[DEBUG] Erro ao inserir usuário na tabela: $e");
+        }
+
+        setState(() {
+          _errorMsg =
+          "✅ Cadastro realizado! Verifique seu email para ativação.";
+          _isLoading = false;
+        });
+
+        // Limpar campos após sucesso
+        _nameController.clear();
+        _emailController.clear();
+        _passwordController.clear();
+
+        // Voltar para modo login após 3 segundos
+        Timer(Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _mode = 0;
+              _errorMsg = null;
+            });
+          }
+        });
+      } else {
+        setState(() {
+          _errorMsg = "Falha ao cadastrar. Tente novamente.";
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      String errorMessage = "Erro ao cadastrar";
+      String errorStr = e.toString().toLowerCase();
+
+      if (errorStr.contains('email') && errorStr.contains('already')) {
+        errorMessage = "Este email já está cadastrado.";
+      } else if (errorStr.contains('password')) {
+        errorMessage = "Senha deve ter no mínimo 6 caracteres.";
+      } else if (errorStr.contains('email')) {
+        errorMessage = "Por favor, informe um email válido.";
+      }
+
+      setState(() {
+        _errorMsg = errorMessage;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    _particleController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const Color kBubblesBlue = Color(0xFF8AC5EC);
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Animated particle system around the form
+        IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _particleController,
+            builder: (context, child) {
+              return CustomPaint(
+                painter: _LoginParticlesPainter(
+                  animationTime: _particleController.value,
+                ),
+                size: const Size(450, 450),
+              );
+            },
+          ),
+        ),
+        // Login form content atop particles
+        Column(
+          children: [
+            if (_mode == 1)
+            // Campo nome/nickname para cadastro
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.3), width: 1.5),
+                    ),
+                    child: TextField(
+                      controller: _nameController,
+                      enabled: !_isLoading,
+                      style: GoogleFonts.orbitron(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      cursorColor: kBubblesBlue,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.transparent,
+                        labelText: "Nome público",
+                        labelStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.8)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 22),
+                      ),
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                ),
+              ),
+            if (_mode == 1)
+              SizedBox(height: 12),
+            // Email
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.3), width: 1.5),
+                  ),
+                  child: TextField(
+                    controller: _emailController,
+                    enabled: !_isLoading,
+                    style: GoogleFonts.orbitron(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    cursorColor: kBubblesBlue,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      labelText: "Email",
+                      labelStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.8)),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 18),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Senha
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.3), width: 1.5),
+                  ),
+                  child: TextField(
+                    controller: _passwordController,
+                    enabled: !_isLoading,
+                    obscureText: !_showPassword,
+                    style: GoogleFonts.orbitron(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    cursorColor: kBubblesBlue,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      labelText: "Senha",
+                      labelStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.8)),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 18),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _showPassword ? Icons.visibility_off : Icons
+                              .visibility,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _showPassword = !_showPassword;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_mode == 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 0),
+                child: Center(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: kBubblesBlue,
+                      textStyle: GoogleFonts.orbitron(
+                        decoration: TextDecoration.underline,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: const Text('Esqueceu a senha?'),
+                    onPressed: _showForgotPasswordDialog,
+                  ),
+                ),
+              ),
+            // Mensagem de erro/feedback
+            if (_errorMsg != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _errorMsg!.startsWith('✅')
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _errorMsg!.startsWith('✅')
+                          ? Colors.green.withOpacity(0.3)
+                          : Colors.red.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    _errorMsg!,
+                    style: TextStyle(
+                      color: _errorMsg!.startsWith('✅')
+                          ? Colors.green.shade300
+                          : kBubblesBlue,
+                      fontFamily: GoogleFonts
+                          .orbitron()
+                          .fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            // Toggle (Entrar / Cadastro) após os campos
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_isLoading) return;
+                      if (_mode == 0) {
+                        // Executar login
+                        _login();
+                      } else {
+                        // Mudar para modo login
+                        setState(() {
+                          _mode = 0;
+                          _errorMsg = null;
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(vertical: 11),
+                      decoration: BoxDecoration(
+                        color: _mode == 0
+                            ? kBubblesBlue.withOpacity(0.18)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _mode == 0 ? kBubblesBlue : Colors.transparent,
+                          width: _mode == 0 ? 2 : 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: _isLoading && _mode == 0
+                            ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                kBubblesBlue),
+                            strokeWidth: 2.8,
+                          ),
+                        )
+                            : Text(
+                          "Entrar",
+                          style: GoogleFonts.orbitron(
+                            color: _mode == 0 ? kBubblesBlue : kBubblesBlue
+                                .withOpacity(0.67),
+                            fontWeight: _mode == 0
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                            fontSize: 18,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 7),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_isLoading) return;
+                      if (_mode == 1) {
+                        // Executar cadastro
+                        _register();
+                      } else {
+                        // Mudar para modo cadastro
+                        setState(() {
+                          _mode = 1;
+                          _errorMsg = null;
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(vertical: 11),
+                      decoration: BoxDecoration(
+                        color: _mode == 1
+                            ? kBubblesBlue.withOpacity(0.18)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _mode == 1 ? kBubblesBlue : Colors.transparent,
+                          width: _mode == 1 ? 2 : 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: _isLoading && _mode == 1
+                            ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                kBubblesBlue),
+                            strokeWidth: 2.8,
+                          ),
+                        )
+                            : Text(
+                          "Cadastrar",
+                          style: GoogleFonts.orbitron(
+                            color: _mode == 1 ? kBubblesBlue : kBubblesBlue
+                                .withOpacity(0.67),
+                            fontWeight: _mode == 1
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                            fontSize: 18,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_mode == 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Não tem conta? ",
+                      style: GoogleFonts.orbitron(
+                        color: kBubblesBlue.withOpacity(0.75),
+                        fontSize: 13,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _mode = 1;
+                          _errorMsg = null;
+                        });
+                      },
+                      child: Text(
+                        "Cadastre-se",
+                        style: GoogleFonts.orbitron(
+                          fontWeight: FontWeight.bold,
+                          color: kBubblesBlue,
+                          fontSize: 13,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_mode == 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Já tem conta? ",
+                      style: GoogleFonts.orbitron(
+                        color: kBubblesBlue.withOpacity(0.75),
+                        fontSize: 13,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _mode = 0;
+                          _errorMsg = null;
+                        });
+                      },
+                      child: Text(
+                        "Entrar",
+                        style: GoogleFonts.orbitron(
+                          fontWeight: FontWeight.bold,
+                          color: kBubblesBlue,
+                          fontSize: 13,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// Particle system painter for login form
+class _LoginParticlesPainter extends CustomPainter {
+  final double animationTime; // from 0.0 to 1.0 for animation cycle
+
+  _LoginParticlesPainter({required this.animationTime});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Use center as the center of the form
+    final double centerX = size.width / 2;
+    final double centerY = size.height / 2;
+
+    // Calculate orbit radius - smaller for more subtle effect
+    final double bigRadius = size.width * 0.42;
+
+    final int numParticles = 18; // Reduced number of particles
+    final double time = animationTime * 2 * pi;
+
+    for (int i = 0; i < numParticles; i++) {
+      // orbiting angle
+      final double baseAngle = i * 2 * pi / numParticles;
+      // Animate particles individually with varied speeds
+      final double speed = 0.5 + 0.3 * sin(baseAngle * 1.8);
+      final double angle = baseAngle + time * speed;
+
+      // Subtle orbital variation
+      double orbitR = bigRadius + 15 * sin(time + baseAngle * 1.5 + i);
+
+      // Small particle size variation
+      double scale = 0.8 + 0.4 * sin(time * 1.2 + i * 0.8);
+
+      // Subtle vertical wobble
+      double yWobble = 8 * sin(time + i * 0.7);
+
+      // Color variation - more subtle
+      double colorT = 0.3 + 0.4 * sin(angle + time * 0.8 + i * 0.6);
+      final Color color = Color.lerp(
+          const Color(0xFF8AC5EC), Colors.white, colorT)!;
+
+      // Some particles use alternate color for variety
+      final bool alt = i % 4 == 0;
+      final Color finalColor = alt
+          ? Color.lerp(
+          const Color(0xFFB24BF3), color, 0.6 + 0.3 * sin(angle + i))!
+          : color;
+
+      // Particle center
+      final double px = centerX + orbitR * cos(angle);
+      final double py = centerY + orbitR * sin(angle) + yWobble;
+
+      final double r = 3 + 2 * scale; // Much smaller particle radius
+
+      // Soft glow - much more subtle
+      final Paint glow = Paint()
+        ..color = finalColor.withOpacity(0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+      canvas.drawCircle(Offset(px, py), r * 2.2, glow);
+
+      // Main particle - small and subtle
+      final Paint dot = Paint()
+        ..color = finalColor.withOpacity(0.65 + 0.15 * scale)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+
+      canvas.drawCircle(Offset(px, py), r, dot);
+
+      // Tiny white highlight - much more subtle
+      if (colorT > 0.7) {
+        final Paint highlight = Paint()
+          ..color = Colors.white.withOpacity(0.2 + 0.3 * (colorT - 0.7))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+        canvas.drawCircle(Offset(px, py), r * 0.6, highlight);
+      }
+    }
+
+    // Remove the orbital circle completely - it was too visible
+    // No orbital circle drawing here anymore
+  }
+
+  @override
+  bool shouldRepaint(covariant _LoginParticlesPainter oldDelegate) {
+    return animationTime != oldDelegate.animationTime;
+  }
+}
 
 extension StringCasingExtension on String {
   String capitalize() {
@@ -796,6 +2314,230 @@ class BubblesPainter extends CustomPainter {
     required this.searchText,
   });
 
+  // New method to draw blockchain cube animations
+  void _drawBlockchainCubes(Canvas canvas, UserBubble bubble, double left,
+      double top, double drawSize, double opacity) {
+    final double time = DateTime
+        .now()
+        .millisecondsSinceEpoch / 1000.0;
+    final double centerX = left + drawSize / 2;
+    final double centerY = top + drawSize / 2;
+    final double orbitRadius = drawSize * 0.6;
+
+    // Draw 6 rotating cubes around the bubble
+    for (int i = 0; i < 6; i++) {
+      final double angle = (time * 0.5 + i * pi / 3) % (2 * pi);
+      final double cubeX = centerX + orbitRadius * cos(angle);
+      final double cubeY = centerY + orbitRadius * sin(angle);
+      final double cubeSize = drawSize * 0.08;
+
+      // Cube rotation for 3D effect
+      final double cubeRotation = time * 2.0 + i * 0.5;
+
+      canvas.save();
+      canvas.translate(cubeX, cubeY);
+      canvas.rotate(cubeRotation);
+
+      // Draw cube with 3D effect
+      _drawBlockchainCube(canvas, cubeSize, opacity);
+
+      canvas.restore();
+
+      // Draw connection lines between cubes
+      if (i < 5) {
+        final double nextAngle = (time * 0.5 + (i + 1) * pi / 3) % (2 * pi);
+        final double nextCubeX = centerX + orbitRadius * cos(nextAngle);
+        final double nextCubeY = centerY + orbitRadius * sin(nextAngle);
+
+        final Paint connectionPaint = Paint()
+          ..color = Colors.cyanAccent.withOpacity(0.3 * opacity)
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke;
+
+        canvas.drawLine(
+          Offset(cubeX, cubeY),
+          Offset(nextCubeX, nextCubeY),
+          connectionPaint,
+        );
+      }
+    }
+
+    // Connect last cube to first
+    final double firstAngle = (time * 0.5) % (2 * pi);
+    final double lastAngle = (time * 0.5 + 5 * pi / 3) % (2 * pi);
+    final double firstCubeX = centerX + orbitRadius * cos(firstAngle);
+    final double firstCubeY = centerY + orbitRadius * sin(firstAngle);
+    final double lastCubeX = centerX + orbitRadius * cos(lastAngle);
+    final double lastCubeY = centerY + orbitRadius * sin(lastAngle);
+
+    final Paint connectionPaint = Paint()
+      ..color = Colors.cyanAccent.withOpacity(0.3 * opacity)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(
+      Offset(lastCubeX, lastCubeY),
+      Offset(firstCubeX, firstCubeY),
+      connectionPaint,
+    );
+  }
+
+  // New method to draw Nubank special effects
+  void _drawNubankSpecialEffect(Canvas canvas, UserBubble bubble, double left,
+      double top, double drawSize, double opacity) {
+    final double time = DateTime
+        .now()
+        .millisecondsSinceEpoch / 1000.0;
+    final double centerX = left + drawSize / 2;
+    final double centerY = top + drawSize / 2;
+
+    // Nubank's signature purple gradient ring
+    final Paint nubankRingPaint = Paint()
+      ..shader = SweepGradient(
+        colors: [
+          Color(0xFF820AD1).withOpacity(opacity), // Nubank purple
+          Color(0xFFB24BF3).withOpacity(opacity), // Lighter purple
+          Color(0xFF6A0DAD).withOpacity(opacity), // Darker purple
+          Color(0xFF820AD1).withOpacity(opacity), // Back to original
+        ],
+        startAngle: time * 0.8,
+        endAngle: time * 0.8 + 6.283,
+      ).createShader(Rect.fromCircle(
+          center: Offset(centerX, centerY), radius: drawSize / 2))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+
+    // Draw animated ring
+    canvas.drawCircle(
+        Offset(centerX, centerY), drawSize / 2 + 8, nubankRingPaint);
+
+    // Purple glowing particles around Nubank bubble
+    final int particleCount = 12;
+    for (int i = 0; i < particleCount; i++) {
+      final double angle = (time * 0.6 + i * 6.283 / particleCount) %
+          (2 * 3.141592);
+      final double orbitRadius = drawSize * (0.7 + 0.2 * sin(time * 1.5 + i));
+      final double particleX = centerX + orbitRadius * cos(angle);
+      final double particleY = centerY + orbitRadius * sin(angle);
+
+      final double particleSize = 2.5 + 1.5 * sin(time * 2.0 + i * 0.5);
+
+      // Gradient from purple to white
+      final Paint particlePaint = Paint()
+        ..color = Color.lerp(
+            Color(0xFF820AD1),
+            Colors.white,
+            0.3 + 0.7 * sin(time * 1.8 + i * 0.3)
+        )!.withOpacity(0.8 * opacity)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
+
+      canvas.drawCircle(
+          Offset(particleX, particleY), particleSize, particlePaint);
+    }
+
+    // Nubank money symbol floating effect
+    final double symbolTime = time * 0.4;
+    final double symbolY = centerY + 15 * sin(symbolTime);
+    final TextPainter moneySymbol = TextPainter(
+      text: TextSpan(
+        text: '💳',
+        style: TextStyle(
+          fontSize: drawSize * 0.25,
+          shadows: [
+            Shadow(
+              blurRadius: 8,
+              color: Color(0xFF820AD1).withOpacity(0.6 * opacity),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    moneySymbol.layout();
+    moneySymbol.paint(
+        canvas,
+        Offset(
+            centerX - moneySymbol.width / 2, symbolY - moneySymbol.height / 2)
+    );
+
+    // Purple energy waves
+    for (int wave = 0; wave < 3; wave++) {
+      final double waveTime = time * (1.2 + wave * 0.3);
+      final double waveRadius = (drawSize / 2) + (20 * (waveTime % 1.0));
+      final Paint wavePaint = Paint()
+        ..color = Color(0xFF820AD1).withOpacity(
+            (1.0 - (waveTime % 1.0)) * 0.3 * opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+
+      canvas.drawCircle(Offset(centerX, centerY), waveRadius, wavePaint);
+    }
+  }
+
+  // Method to draw individual blockchain cube with 3D effect
+  void _drawBlockchainCube(Canvas canvas, double size, double opacity) {
+    final double halfSize = size / 2;
+    final double depth = size * 0.3;
+
+    // Front face (main cube)
+    final Paint frontPaint = Paint()
+      ..color = Colors.lightBlueAccent.withOpacity(0.8 * opacity)
+      ..style = PaintingStyle.fill;
+
+    final Rect frontRect = Rect.fromCenter(
+      center: Offset.zero,
+      width: size,
+      height: size,
+    );
+
+    canvas.drawRect(frontRect, frontPaint);
+
+    // Top face (3D effect)
+    final Paint topPaint = Paint()
+      ..color = Colors.white.withOpacity(0.6 * opacity)
+      ..style = PaintingStyle.fill;
+
+    final Path topPath = Path();
+    topPath.moveTo(-halfSize, -halfSize);
+    topPath.lineTo(-halfSize + depth, -halfSize - depth);
+    topPath.lineTo(halfSize + depth, -halfSize - depth);
+    topPath.lineTo(halfSize, -halfSize);
+    topPath.close();
+
+    canvas.drawPath(topPath, topPaint);
+
+    // Right face (3D effect)
+    final Paint rightPaint = Paint()
+      ..color = Colors.blueAccent.withOpacity(0.9 * opacity)
+      ..style = PaintingStyle.fill;
+
+    final Path rightPath = Path();
+    rightPath.moveTo(halfSize, -halfSize);
+    rightPath.lineTo(halfSize + depth, -halfSize - depth);
+    rightPath.lineTo(halfSize + depth, halfSize - depth);
+    rightPath.lineTo(halfSize, halfSize);
+    rightPath.close();
+
+    canvas.drawPath(rightPath, rightPaint);
+
+    // Cube outline
+    final Paint outlinePaint = Paint()
+      ..color = Colors.cyanAccent.withOpacity(0.9 * opacity)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawRect(frontRect, outlinePaint);
+    canvas.drawPath(topPath, outlinePaint);
+    canvas.drawPath(rightPath, outlinePaint);
+
+    // Add small glowing center dot (representing data/hash)
+    final Paint centerPaint = Paint()
+      ..color = Colors.yellowAccent.withOpacity(0.9 * opacity)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(Offset.zero, size * 0.1, centerPaint);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final double availableWidth = size.width;
@@ -817,7 +2559,9 @@ class BubblesPainter extends CustomPainter {
 
     for (final bubble in bolhasParaDesenhar) {
       final bool isSpecial = bubble.id == 'game_bubble' ||
-          bubble.id == 'terlinet_word';
+          bubble.id == 'terlinet_word' ||
+          bubble.id == 'bitcoin_bubble' ||
+          bubble.id == 'canais_bubble';
       double baseSize = isSpecial ? 60.0 : bubble.size;
 
       bool isThisTheSearchedBubble = isSearching &&
@@ -840,75 +2584,185 @@ class BubblesPainter extends CustomPainter {
         }
       }
 
+      // Draw Nubank bubble special effects
+      // Check by id == 'nubank' or name contains 'nubank'
+      final bool isNubankBubble = bubble.id == 'nubank' ||
+          (bubble.isSocial && bubble.name.toLowerCase().contains('nubank')) ||
+          (bubble.id != 'game_bubble' &&
+              bubble.id != 'terlinet_word' &&
+              bubble.id != 'canais_bubble' &&
+              bubble.name.toLowerCase().contains('nubank'));
+
+      if (isNubankBubble && opacity > 0.3) {
+        _drawNubankSpecialEffect(canvas, bubble, left, top, drawSize, opacity);
+      }
+
+      // Draw blockchain cube animations for crypto-related bubbles
+      final bool isCryptoBubble = bubble.id == 'bitcoin_bubble' ||
+          (bubble.isSocial && bubble.name.toLowerCase().contains('bitcoin')) ||
+          (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
+              bubble.id != 'canais_bubble' && bubble.id != 'game_bubble' &&
+              bubble.name.toLowerCase().contains('bitcoin'));
+
+      if (isCryptoBubble && opacity > 0.3) {
+        _drawBlockchainCubes(canvas, bubble, left, top, drawSize, opacity);
+      }
+
       if (isSpecial) {
         final List<Color> neonColors = [
           Colors.blueAccent, Colors.cyanAccent, Colors.limeAccent, Colors.greenAccent,
         ];
-        final double anim = (DateTime.now().millisecondsSinceEpoch % 2000) / 2000.0;
+        final double anim = (DateTime
+            .now()
+            .millisecondsSinceEpoch % 2000) / 2000.0;
         final sweep = 6.283 * anim;
-        final Rect gameRect = Rect.fromCircle(
-            center: Offset(left + drawSize / 2, top + drawSize / 2),
-            radius: drawSize / 2);
-        final Paint gradPaint = Paint()
-          ..shader = SweepGradient(
-            center: FractionalOffset.center,
-            colors: neonColors,
-            stops: [0.0, 0.25, 0.6, 1.0],
-            startAngle: sweep,
-            endAngle: sweep + 6.283,
-          ).createShader(gameRect)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = drawSize * 0.08;
-        // Desenha o anel apenas se NÃO for a bolha terlinet_word
-        if (bubble.id != 'terlinet_word') {
+
+        // Cores especiais para a bolha CANAIS - tons mais esverdeados e neon
+        if (bubble.id == 'canais_bubble') {
+          final List<Color> canaisColors = [
+            Colors.limeAccent,
+            Colors.greenAccent,
+            Colors.lightGreenAccent,
+            Colors.green.shade300,
+          ];
+          final Rect gameRect = Rect.fromCircle(
+              center: Offset(left + drawSize / 2, top + drawSize / 2),
+              radius: drawSize / 2);
+          final Paint gradPaint = Paint()
+            ..shader = SweepGradient(
+              center: FractionalOffset.center,
+              colors: canaisColors,
+              stops: [0.0, 0.25, 0.6, 1.0],
+              startAngle: sweep,
+              endAngle: sweep + 6.283,
+            ).createShader(gameRect)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = drawSize * 0.08;
+
           canvas.drawCircle(
               Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
               gradPaint);
+
+          final Paint glowPaint = Paint()
+            ..color = Colors.limeAccent.withOpacity(
+                (0.35 + 0.25 * (0.5 + 0.5 * sin(anim * 6.283))) * opacity)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+          canvas.drawCircle(
+              Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 7,
+              glowPaint);
+
+          final double hexRadius = drawSize * 0.24;
+          for (int i = 0; i < 6; i++) {
+            final double angle = 6.283 * i / 6;
+            final double x = left + drawSize / 2 + hexRadius * cos(angle);
+            final double y = top + drawSize / 2 + hexRadius * sin(angle);
+            canvas.drawCircle(Offset(x, y), drawSize * 0.04, Paint()
+              ..color = Colors.lightGreenAccent.withOpacity(0.15 * opacity));
+          }
+          for (int i = 0; i < 3; i++) {
+            final double ang1 = 6.283 * i / 3;
+            final double ang2 = 6.283 * (i + 1) / 3;
+            final double x1 = left + drawSize / 2 + hexRadius * cos(ang1);
+            final double y1 = top + drawSize / 2 + hexRadius * sin(ang1);
+            final double x2 = left + drawSize / 2 + hexRadius * cos(ang2);
+            final double y2 = top + drawSize / 2 + hexRadius * sin(ang2);
+            canvas.drawLine(
+              Offset(x1, y1), Offset(x2, y2),
+              Paint()
+                ..color = Colors.limeAccent.withOpacity(0.15 * opacity)
+                ..strokeWidth = 2.2,
+            );
+          }
+        } else {
+          final Rect gameRect = Rect.fromCircle(
+              center: Offset(left + drawSize / 2, top + drawSize / 2),
+              radius: drawSize / 2);
+          final Paint gradPaint = Paint()
+            ..shader = SweepGradient(
+              center: FractionalOffset.center,
+              colors: neonColors,
+              stops: [0.0, 0.25, 0.6, 1.0],
+              startAngle: sweep,
+              endAngle: sweep + 6.283,
+            ).createShader(gameRect)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = drawSize * 0.08;
+          // Desenha o anel apenas se NÃO for a bolha terlinet_word, bitcoin_bubble, canais_bubble
+          if (bubble.id != 'terlinet_word' && bubble.id != 'bitcoin_bubble' &&
+              bubble.id != 'canais_bubble') {
+            canvas.drawCircle(
+                Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
+                gradPaint);
+          }
+
+          final Paint glowPaint = Paint()
+            ..color = Colors.cyanAccent.withOpacity(
+                (0.35 + 0.25 * (0.5 + 0.5 * sin(anim * 6.283))) * opacity)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+          canvas.drawCircle(
+              Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 7,
+              glowPaint);
+
+          final double hexRadius = drawSize * 0.24;
+          for (int i = 0; i < 6; i++) {
+            final double angle = 6.283 * i / 6;
+            final double x = left + drawSize / 2 + hexRadius * cos(angle);
+            final double y = top + drawSize / 2 + hexRadius * sin(angle);
+            canvas.drawCircle(Offset(x, y), drawSize * 0.04, Paint()
+              ..color = Colors.white.withOpacity(0.15 * opacity));
+          }
+          for (int i = 0; i < 3; i++) {
+            final double ang1 = 6.283 * i / 3;
+            final double ang2 = 6.283 * (i + 1) / 3;
+            final double x1 = left + drawSize / 2 + hexRadius * cos(ang1);
+            final double y1 = top + drawSize / 2 + hexRadius * sin(ang1);
+            final double x2 = left + drawSize / 2 + hexRadius * cos(ang2);
+            final double y2 = top + drawSize / 2 + hexRadius * sin(ang2);
+            canvas.drawLine(
+              Offset(x1, y1), Offset(x2, y2),
+              Paint()
+                ..color = Colors.cyanAccent.withOpacity(0.15 * opacity)
+                ..strokeWidth = 2.2,
+            );
+          }
         }
 
-        final Paint glowPaint = Paint()
-          ..color = Colors.cyanAccent.withOpacity(
-              (0.35 + 0.25 * (0.5 + 0.5 * sin(anim * 6.283))) * opacity)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-        canvas.drawCircle(
-            Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 7,
-            glowPaint);
-
-        final double hexRadius = drawSize * 0.24;
-        for (int i = 0; i < 6; i++) {
-          final double angle = 6.283 * i / 6;
-          final double x = left + drawSize / 2 + hexRadius * cos(angle);
-          final double y = top + drawSize / 2 + hexRadius * sin(angle);
-          canvas.drawCircle(Offset(x, y), drawSize * 0.04, Paint()
-            ..color = Colors.white.withOpacity(0.15 * opacity));
-        }
-        for (int i = 0; i < 3; i++) {
-          final double ang1 = 6.283 * i / 3;
-          final double ang2 = 6.283 * (i + 1) / 3;
-          final double x1 = left + drawSize / 2 + hexRadius * cos(ang1);
-          final double y1 = top + drawSize / 2 + hexRadius * sin(ang1);
-          final double x2 = left + drawSize / 2 + hexRadius * cos(ang2);
-          final double y2 = top + drawSize / 2 + hexRadius * sin(ang2);
-          canvas.drawLine(
-            Offset(x1, y1), Offset(x2, y2),
-            Paint()
-              ..color = Colors.cyanAccent.withOpacity(0.15 * opacity)
-              ..strokeWidth = 2.2,
-          );
-        }
         final String label = (bubble.id == 'game_bubble')
             ? 'GAME'
+            : (bubble.id == 'bitcoin_bubble')
+            ? '₿'
+            : (bubble.id == 'canais_bubble')
+            ? 'CANAIS'
             : 'TerlineT Word';
+        final double fontSize = (bubble.id == 'game_bubble')
+            ? drawSize * 0.31
+            : (bubble.id == 'bitcoin_bubble')
+            ? drawSize * 0.57
+            : (bubble.id == 'canais_bubble')
+            ? drawSize * 0.22
+            : drawSize * 0.27;
+        final double letterSpacing = (bubble.id == 'game_bubble')
+            ? 3.1
+            : 2.0;
         final TextPainter textPainter = TextPainter(
           text: TextSpan(
             text: label,
             style: TextStyle(
               fontFamily: 'RobotoMono',
               fontWeight: FontWeight.w900,
-              fontSize: drawSize * (label == 'GAME' ? 0.31 : 0.27),
+              fontSize: fontSize,
               color: Colors.white.withOpacity(opacity),
-              letterSpacing: label == 'GAME' ? 3.1 : 2.0,
-              shadows: [
+              letterSpacing: letterSpacing,
+              shadows: bubble.id == 'canais_bubble' ? [
+                Shadow(
+                  blurRadius: 10,
+                  color: Colors.limeAccent.withOpacity(opacity),
+                ),
+                Shadow(
+                  blurRadius: 20,
+                  color: Colors.greenAccent.withOpacity(opacity),
+                ),
+              ] : [
                 Shadow(
                   blurRadius: 10,
                   color: Colors.cyanAccent.withOpacity(opacity),
@@ -994,8 +2848,144 @@ class BubblesPainter extends CustomPainter {
             glowPaint);
       }
 
+      if (bubble.hasNotification) {
+        final notifPaint = Paint()
+          ..color = Colors.greenAccent.withOpacity(0.9 * opacity)
+          ..style = PaintingStyle.fill;
+        final notifBorderPaint = Paint()
+          ..color = Colors.white.withOpacity(0.8 * opacity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5;
+
+        final notifRadius = drawSize * 0.1;
+        final notifCenter = Offset(
+            left + drawSize - (drawSize * 0.15), top + (drawSize * 0.15));
+
+        canvas.drawCircle(notifCenter, notifRadius, notifPaint);
+        canvas.drawCircle(notifCenter, notifRadius, notifBorderPaint);
+      }
+      if (isSpecial) {
+        if (bubble.isLive) {
+          // Efeito pulsante para live
+          final double pulseAnimation = 0.8 + 0.2 * (0.5 + 0.5 * sin(DateTime
+              .now()
+              .millisecondsSinceEpoch / 300));
+
+          final liveIndicatorPaint = Paint()
+            ..color = Colors.redAccent.withOpacity(pulseAnimation * opacity)
+            ..style = PaintingStyle.fill;
+          final liveIndicatorBorderPaint = Paint()
+            ..color = Colors.white.withOpacity(0.9 * opacity)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0;
+          final liveIndicatorRadius = drawSize * 0.1 * pulseAnimation;
+          final liveIndicatorCenter = Offset(
+              left + drawSize - (drawSize * 0.18), top + (drawSize * 0.18));
+
+          // Halo ao redor do indicador
+          final liveHaloPaint = Paint()
+            ..color = Colors.redAccent.withOpacity(
+                0.3 * pulseAnimation * opacity)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+          canvas.drawCircle(
+              liveIndicatorCenter, liveIndicatorRadius * 1.8, liveHaloPaint);
+
+          canvas.drawCircle(
+              liveIndicatorCenter, liveIndicatorRadius, liveIndicatorPaint);
+          canvas.drawCircle(liveIndicatorCenter, liveIndicatorRadius,
+              liveIndicatorBorderPaint);
+
+          // Texto "LIVE" pequeno opcional
+          final liveTextPainter = TextPainter(
+            text: TextSpan(
+              text: 'LIVE',
+              style: TextStyle(
+                fontSize: drawSize * 0.08,
+                fontWeight: FontWeight.w900,
+                color: Colors.white.withOpacity(opacity),
+                shadows: [
+                  Shadow(
+                    blurRadius: 2,
+                    color: Colors.redAccent.withOpacity(opacity),
+                  ),
+                ],
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          liveTextPainter.layout(minWidth: 0, maxWidth: drawSize);
+          liveTextPainter.paint(
+            canvas,
+            Offset(
+              left + drawSize - (drawSize * 0.35),
+              top + drawSize - (drawSize * 0.15),
+            ),
+          );
+        }
+      } else {
+        if (bubble.isLive) {
+          // Efeito pulsante para live
+          final double pulseAnimation = 0.8 + 0.2 * (0.5 + 0.5 * sin(DateTime
+              .now()
+              .millisecondsSinceEpoch / 300));
+
+          final liveIndicatorPaint = Paint()
+            ..color = Colors.redAccent.withOpacity(pulseAnimation * opacity)
+            ..style = PaintingStyle.fill;
+          final liveIndicatorBorderPaint = Paint()
+            ..color = Colors.white.withOpacity(0.9 * opacity)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0;
+          final liveIndicatorRadius = drawSize * 0.1 * pulseAnimation;
+          final liveIndicatorCenter = Offset(
+              left + drawSize - (drawSize * 0.18), top + (drawSize * 0.18));
+
+          // Halo ao redor do indicador
+          final liveHaloPaint = Paint()
+            ..color = Colors.redAccent.withOpacity(
+                0.3 * pulseAnimation * opacity)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+          canvas.drawCircle(
+              liveIndicatorCenter, liveIndicatorRadius * 1.8, liveHaloPaint);
+
+          canvas.drawCircle(
+              liveIndicatorCenter, liveIndicatorRadius, liveIndicatorPaint);
+          canvas.drawCircle(liveIndicatorCenter, liveIndicatorRadius,
+              liveIndicatorBorderPaint);
+
+          // Texto "LIVE" pequeno opcional
+          final liveTextPainter = TextPainter(
+            text: TextSpan(
+              text: 'LIVE',
+              style: TextStyle(
+                fontSize: drawSize * 0.08,
+                fontWeight: FontWeight.w900,
+                color: Colors.white.withOpacity(opacity),
+                shadows: [
+                  Shadow(
+                    blurRadius: 2,
+                    color: Colors.redAccent.withOpacity(opacity),
+                  ),
+                ],
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          liveTextPainter.layout(minWidth: 0, maxWidth: drawSize);
+          liveTextPainter.paint(
+            canvas,
+            Offset(
+              left + drawSize - (drawSize * 0.35),
+              top + drawSize - (drawSize * 0.15),
+            ),
+          );
+        }
+      }
+
       if (bubble.avatarUrl.isNotEmpty && bubble.id != 'game_bubble' &&
-          bubble.id != 'terlinet_word') {
+          bubble.id != 'terlinet_word' &&
+          bubble.id != 'bitcoin_bubble' &&
+          bubble.id != 'canais_bubble') {
         final avatarImage = bubbleImages[bubble.id];
         final imageOpacity = opacity;
 
@@ -1016,27 +3006,30 @@ class BubblesPainter extends CustomPainter {
           );
           canvas.restore();
 
-          final borderPaint = Paint()
-            ..color = Colors.white.withOpacity(0.82 * imageOpacity)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2.8;
-          canvas.drawCircle(
-              Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
-              borderPaint);
+          // Remove white border around user bubbles
+          // final borderPaint = Paint()
+          //   ..color = Colors.white.withOpacity(0.82 * imageOpacity)
+          //   ..style = PaintingStyle.stroke
+          //   ..strokeWidth = 2.8;
+          // canvas.drawCircle(
+          //     Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
+          //     borderPaint);
         } else {
           final avatarPaint = Paint()..color = Colors.grey.withOpacity(imageOpacity * 0.5);
           canvas.drawCircle(
               Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
               avatarPaint);
-          final borderPaint = Paint()
-            ..color = Colors.white.withOpacity(0.82 * imageOpacity)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2.8;
-          canvas.drawCircle(
-              Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
-              borderPaint);
+          // Remove white border around user bubbles without avatars
+          // final borderPaint = Paint()
+          //   ..color = Colors.white.withOpacity(0.82 * imageOpacity)
+          //   ..style = PaintingStyle.stroke
+          //   ..strokeWidth = 2.8;
+          // canvas.drawCircle(
+          //     Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
+          //     borderPaint);
         }
-      } else if (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word') {
+      } else if (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
+          bubble.id != 'bitcoin_bubble' && bubble.id != 'canais_bubble') {
         final textPainter = TextPainter(
           text: TextSpan(
             text: bubble.name.isNotEmpty ? bubble.name[0].toUpperCase() : '',
@@ -1055,7 +3048,9 @@ class BubblesPainter extends CustomPainter {
       }
 
       if (isThisTheSearchedBubble && bubble.id != 'game_bubble' &&
-          bubble.id != 'terlinet_word') {
+          bubble.id != 'terlinet_word' &&
+          bubble.id != 'bitcoin_bubble' &&
+          bubble.id != 'canais_bubble') {
         final highlightPaint = Paint()
           ..color = Colors.redAccent.withOpacity(0.9 * opacity)
           ..style = PaintingStyle.stroke

@@ -237,6 +237,19 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Stack(
         children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF0A0E14),
+                  Color(0xFF131A25),
+                  Color(0xFF1D2636)
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
           const QuantumAnimatedBackground(),
           Center(
             child: SingleChildScrollView(
@@ -372,78 +385,88 @@ class _LoginScreenState extends State<LoginScreen> {
                               .fontFamily)),
                         ),
                         const SizedBox(height: 28),
-                        OutlinedButton(
-                          onPressed: isLoading ? null : _login,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: kBubblesBlue,
-                            backgroundColor: QuantumColors.blueVeryLight,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            side: BorderSide(
-                                color: kBubblesBlue, width: 1.7),
-                            elevation: 0,
-                            fixedSize: const Size(180, 40),
-                            textStyle: GoogleFonts.orbitron(
-                                fontWeight: FontWeight.bold, fontSize: 16,
-                                color: kBubblesBlue),
-                          ),
-                          child: isLoading
-                              ? SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  kBubblesBlue),
-                              strokeWidth: 2.8,
-                            ),
-                          )
-                              : const Text("ENTRAR"),
-                        ),
-                        const SizedBox(height: 7),
-                        OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => const RegisterScreen()));
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: kBubblesBlue,
-                            backgroundColor: QuantumColors.blueVeryLight,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            side: BorderSide(
-                                color: kBubblesBlue, width: 1.7),
-                            elevation: 0,
-                            fixedSize: const Size(180, 40),
-                            textStyle: GoogleFonts.orbitron(
-                                fontWeight: FontWeight.bold, fontSize: 16,
-                                color: kBubblesBlue),
-                          ),
-                          child: const Text("Cadastre-se"),
-                        ),
-                        const SizedBox(height: 7),
-                        OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TermsPrivacyScreen(),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            OutlinedButton(
+                              onPressed: isLoading ? null : _login,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: kBubblesBlue,
+                                backgroundColor: QuantumColors.blueVeryLight,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                side: const BorderSide(
+                                    color: kBubblesBlue, width: 1.7),
+                                elevation: 0,
+                                fixedSize: const Size(180, 40),
+                                textStyle: GoogleFonts.orbitron(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                disabledForegroundColor: kBubblesBlue
+                                    .withOpacity(
+                                    0.6),
+                                disabledBackgroundColor: QuantumColors
+                                    .blueVeryLight,
                               ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: kBubblesBlue,
-                            backgroundColor: QuantumColors.blueVeryLight,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16)),
-                            side: BorderSide(
-                                color: kBubblesBlue, width: 1.7),
-                            elevation: 0,
-                            fixedSize: const Size(180, 40),
-                            textStyle: GoogleFonts.orbitron(
-                                fontWeight: FontWeight.bold, fontSize: 16,
-                                color: kBubblesBlue),
-                          ),
-                          child: const Text("Políticas"),
+                              child: isLoading
+                                  ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      kBubblesBlue),
+                                  strokeWidth: 2.8,
+                                ),
+                              )
+                                  : const Text(
+                                  "ENTRAR", style: TextStyle(letterSpacing: 1)),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton(
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(
+                                    builder: (_) => const RegisterScreen()));
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: kBubblesBlue,
+                                backgroundColor: QuantumColors.blueVeryLight,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                side: const BorderSide(
+                                    color: kBubblesBlue, width: 1.7),
+                                elevation: 0,
+                                fixedSize: const Size(180, 40),
+                                textStyle: GoogleFonts.orbitron(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              child: const Text('Cadastre-se',
+                                style: TextStyle(letterSpacing: 1),),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => TermsPrivacyScreen(),
+                                  ),
+                                );
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: kBubblesBlue,
+                                backgroundColor: QuantumColors.blueVeryLight,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                side: const BorderSide(
+                                    color: kBubblesBlue, width: 1.7),
+                                elevation: 0,
+                                fixedSize: const Size(180, 40),
+                                textStyle: GoogleFonts.orbitron(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              child: const Text('Políticas',
+                                style: TextStyle(letterSpacing: 1),),
+                            ),
+                          ],
                         ),
                       ],
                     ),

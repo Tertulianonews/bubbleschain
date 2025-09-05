@@ -11,7 +11,7 @@ dependencies:
   supabase: ^2.4.2
   supabase_flutter: ^2.3.3
   google_fonts: ^6.2.0
-  image_picker: ^1.0.7
+  image_picker: ^1.0.4
   file_picker: any
   url_launcher: ^6.2.5
   any_link_preview: ^3.0.1
@@ -20,11 +20,15 @@ dependencies:
   audioplayers: ^5.0.1
   app_links: ^3.4.1
   flutter_cube: ^0.1.1
+  flutter_webrtc: ^1.1.0
   rive: ^0.12.4
   shared_preferences: ^2.2.3
-
+  # Para permissões de câmera e microfone
+  permission_handler: ^11.0.1
+  # Para captura de vídeo real
+  camera: ^0.10.5+9
   vector_math: ^2.1.4
-  flame: ^1.12.0
+  flame: ^1.30.0
   model_viewer_plus: ^1.9.3
 
 
@@ -50,6 +54,9 @@ flutter:
     - assets/models/colors.mtl
     # Diretório para paisagens/tiles (deixe os PNGs aqui)
     - assets/map/tiles/
+    - assets/Bitcoin.png
+    - assets/LuxInspira.mp3
+
 
 dev_dependencies:
   flutter_launcher_icons: ^0.13.1

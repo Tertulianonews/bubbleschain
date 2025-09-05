@@ -4,7 +4,9 @@ import '../services/supabase_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class BubbleGameScreen extends StatefulWidget {
-  const BubbleGameScreen({super.key});
+  const BubbleGameScreen({super.key, this.demoMode = false});
+
+  final bool demoMode;
 
   @override
   State<BubbleGameScreen> createState() => _BubbleGameScreenState();
@@ -305,6 +307,92 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
   bool showSolanaExplosion = false;
   Offset? _lastSolanaCenterPos;
 
+  Widget buildAppBarPreview(BuildContext context) {
+    final w = MediaQuery
+        .of(context)
+        .size
+        .width;
+    return Container(
+      height: 104,
+      color: Colors.transparent,
+      padding: const EdgeInsets.only(top: 4.0),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Botão Regras acima
+            Padding(
+              padding: const EdgeInsets.only(top: 0, left: 10, right: 10),
+              child: Align(
+                alignment: Alignment.topRight,
+                child: ElevatedButton.icon(
+                  onPressed: () {}, // inativo no preview
+                  icon: const Icon(Icons.rule, color: Colors.white),
+                  label: const Text(
+                      'Regras', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 7),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w900, fontSize: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    elevation: 2,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Text(
+                      '👈',
+                      style: TextStyle(
+                        fontSize: 34,
+                        shadows: [
+                          Shadow(blurRadius: 6, color: Colors.black26)
+                        ],
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      ClipOval(
+                        child: Image.asset('assets/icon_bolhas.png', width: 33,
+                            height: 33,
+                            fit: BoxFit.cover),
+                      ),
+                      const SizedBox(width: 9),
+                      AnimatedScale(
+                        scale: 1.0,
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.elasticOut,
+                        child: Text(
+                          balance.toStringAsFixed(8),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xff21537f),
+                            fontSize: 19,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery
@@ -315,14 +403,189 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
         .of(context)
         .size
         .height;
-    // Progresso até próxima Solana
     double progressToSol = (balance % solTriggerThreshold) /
         solTriggerThreshold;
-    // Fundo dinâmico
     Color fondo1 = Color.lerp(Colors.lightBlueAccent, Colors.deepPurpleAccent,
         (balance / 0.05).clamp(0, 1))!;
     Color fondo2 = Color.lerp(
         Colors.blue[100]!, Colors.amber, (balance / 0.19).clamp(0, 1))!;
+    if (widget.demoMode) {
+      return Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+              colors: [fondo1, fondo2],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
+        ),
+        child: Column(
+          children: [
+            buildAppBarPreview(context),
+            Expanded(
+              child: Transform.translate(
+                offset: Offset(shakeOffsetX, shakeOffsetY),
+                child: SizedBox.expand(
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 18, right: 18, top: 13,
+                        child: SizedBox(
+                          height: 11,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: progressToSol,
+                              backgroundColor: Colors.white.withOpacity(0.15),
+                              color: Colors.deepPurpleAccent,
+                              minHeight: 11,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (showSolBadge) Positioned(
+                        top: 52,
+                        left: w / 2 - 90,
+                        child: AnimatedOpacity(
+                          opacity: solBadgeOpacity,
+                          duration: const Duration(milliseconds: 330),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 23, vertical: 12),
+                            decoration: BoxDecoration(
+                                color: Colors.purple.shade600.withOpacity(0.94),
+                                borderRadius: BorderRadius.circular(38),
+                                border: Border.all(
+                                    color: Colors.white, width: 2.2),
+                                boxShadow: [
+                                  BoxShadow(blurRadius: 21,
+                                      color: Colors.purple.shade200.withOpacity(
+                                          0.35))
+                                ]
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Image.asset('assets/sol_bubble.jpg', width: 32,
+                                    height: 32,
+                                    fit: BoxFit.cover),
+                                const SizedBox(width: 18),
+                                Text('Solana Pop!', style: TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 1.8)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (showSolanaExplosion && solanaExplosionPos != null)
+                        Positioned(
+                          left: solanaExplosionPos!.dx - 120,
+                          top: solanaExplosionPos!.dy - 120,
+                          child: IgnorePointer(
+                            child: _SolanaExplosionEffect(size: 240),
+                          ),
+                        ),
+                      Positioned(
+                        top: 25, right: 26,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 380),
+                          decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 13, vertical: 6),
+                          child: RichText(
+                            text: TextSpan(
+                                children: [
+                                  WidgetSpan(
+                                    child: Icon(
+                                        Icons.bubble_chart_rounded, size: 22,
+                                        color: Colors.white.withOpacity(0.82)),
+                                  ),
+                                  TextSpan(
+                                      text: '  $poppedCount',
+                                      style: const TextStyle(fontSize: 19,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                          letterSpacing: 1)
+                                  )
+                                ]
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (comboText != null && lastComboPosition != null)
+                        Positioned(
+                          left: (lastComboPosition!.dx - 70).clamp(26, w - 140),
+                          top: (lastComboPosition!.dy - 90).clamp(80, h - 140),
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 500),
+                            opacity: comboTextOpacity,
+                            child: AnimatedScale(
+                              scale: comboTextScale,
+                              duration: const Duration(milliseconds: 240),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 24, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.yellow.withOpacity(0.82),
+                                  borderRadius: BorderRadius.circular(32),
+                                  boxShadow: [
+                                    BoxShadow(blurRadius: 18,
+                                        color: Colors.orange.withOpacity(0.31))
+                                  ],
+                                ),
+                                child: Text(
+                                  comboText!,
+                                  style: TextStyle(
+                                      color: Colors.deepOrange[900],
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 27,
+                                      letterSpacing: 2.0,
+                                      shadows: const [
+                                        Shadow(blurRadius: 11,
+                                            color: Colors.orange)
+                                      ]
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      for(final solana in solBubbles)
+                        _SolanaBubbleWidget(
+                          key: ValueKey(solana.id),
+                          id: solana.id,
+                          duration: solana.duration,
+                          onPop: () => _onSolanaPop(solana.id),
+                          onOut: () => _onSolanaOut(solana.id),
+                        ),
+                      for (final bubble in bubbles)
+                        _GameVisualBubble(
+                          key: ValueKey(bubble.id),
+                          x: bubble.x,
+                          size: bubble.size,
+                          duration: bubble.duration,
+                          onPop: (TapDownDetails? details) =>
+                              _onBubblePop(bubble.id, tapDetails: details),
+                          onOut: () => _onBubbleOut(bubble.id),
+                          gradientColors: bubble.gradientColors,
+                          emoji: bubble.emoji,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          ],
+        ),
+      );
+    }
+    // Modo normal
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: PreferredSize(

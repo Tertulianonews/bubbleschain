@@ -2,7 +2,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'login_screen.dart'; // Import the LoginScreen
+import '../widgets/live_video_widget.dart';
+import 'bubbles_home_screen.dart'; // Import the BubblesHomeScreen
 
 class ProfileSetupScreen extends StatefulWidget {
   final String? userIdOverride;
@@ -110,6 +111,64 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
+  Future<void> _iniciarLiveVideo() async {
+    // Gerar nome único do canal baseado no userId
+    final channelName = 'live_${userId}_${DateTime
+        .now()
+        .millisecondsSinceEpoch}';
+
+    print(
+        "[DEBUG] Iniciando live - userId: $userId, channelName: $channelName");
+
+    try {
+      // Marcar usuário como "ao vivo" no Supabase ANTES de navegar
+      await Supabase.instance.client.from('users').update({
+        'is_live': true,
+        'live_channel': channelName,
+        'live_started_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
+
+      print("[DEBUG] Usuário marcado como ao vivo no banco de dados");
+
+      if (!mounted) return;
+
+      // Navegar para a tela de live como host
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              LiveVideoWidget(
+                channelName: channelName,
+                userId: userId,
+                isHost: true,
+              ),
+        ),
+      ).then((_) {
+        // Quando voltar da tela de live, desmarcar como ao vivo
+        _pararLive();
+      });
+    } catch (e) {
+      print("[DEBUG] Erro ao marcar usuário como ao vivo: $e");
+      setState(() {
+        errorMsg = 'Erro ao iniciar live: $e';
+      });
+    }
+  }
+
+  Future<void> _pararLive() async {
+    print("[DEBUG] Parando live - userId: $userId");
+    try {
+      await Supabase.instance.client.from('users').update({
+        'is_live': false,
+        'live_channel': null,
+        'live_started_at': null,
+      }).eq('id', userId);
+      print("[DEBUG] Usuário desmarcado como ao vivo no banco de dados");
+    } catch (e) {
+      print("[DEBUG] Erro ao desmarcar usuário como ao vivo: $e");
+    }
+  }
+
   @override
   void dispose() {
     _nickController.dispose();
@@ -193,12 +252,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 child: const Text('Voltar para bolhas'),
               ),
               const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _iniciarLiveVideo,
+                child: const Text('Iniciar Live Video'),
+              ),
+              const SizedBox(height: 16),
               GestureDetector(
                 onTap: () async {
                   await Supabase.instance.client.auth.signOut();
                   if (!mounted) return;
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const BubblesHomeScreen()),
                         (route) => false,
                   );
                 },

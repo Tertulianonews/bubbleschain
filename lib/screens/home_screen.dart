@@ -106,6 +106,15 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+      // Botão para testar fase Bitcoin Hill
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(context).pushNamed('/bitcoin_hill');
+        },
+        label: const Text('Fase: Bitcoin Hill'),
+        icon: const Icon(Icons.sports_handball),
+        backgroundColor: Colors.orange,
+      ),
     );
   }
 }
