@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 
 // Timer is used in this file. dart:async import ensures Timer works.
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'profile_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart';
@@ -14,13 +12,641 @@ import 'bubble_game_screen.dart';
 import 'package:http/http.dart' as http;
 import 'terlinet_word_screen.dart';
 import 'channels_screen.dart';
-import '../theme.dart';
 import '../widgets/live_video_widget.dart';
-import '../widgets/live_preview_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'register_screen.dart';
 import 'terms_privacy_screen.dart';
 import '../widgets/pepe_logo.dart';
+
+// Modelo para notificação
+class NotificationItem {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String senderAvatar;
+  final String lastMessage;
+  final DateTime timestamp;
+  final int unreadCount;
+
+  NotificationItem({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.senderAvatar,
+    required this.lastMessage,
+    required this.timestamp,
+    required this.unreadCount,
+  });
+}
+
+// Widget para a tela de notificações
+class NotificationsScreen extends StatefulWidget {
+  final String currentUserId;
+
+  const NotificationsScreen({Key? key, required this.currentUserId})
+      : super(key: key);
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  List<NotificationItem> notifications = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    print(
+        "[DEBUG NotificationsScreen] _loadNotifications iniciado para userId: ${widget
+            .currentUserId}");
+
+    if (!mounted) return;
+
+    try {
+      // Buscar mensagens não lidas individualmente, exibindo cada mensagem como uma notificação separada (não mais agrupadas por remetente)
+      print(
+          "[DEBUG NotificationsScreen] Fazendo query para mensagens não lidas...");
+
+      final response = await Supabase.instance.client
+          .from('messages')
+          .select('*')
+          .eq('receiver_id', widget.currentUserId)
+          .eq('was_read', false)
+          .order('created_at', ascending: false);
+
+      print("[DEBUG NotificationsScreen] Resposta da query: ${response
+          .length} mensagens");
+      print("[DEBUG NotificationsScreen] Dados: $response");
+
+      if (!mounted) return;
+
+      // Agrupar mensagens não lidas por remetente para criar uma notificação por usuário
+      Map<String, List<dynamic>> messagesBySender = {};
+
+      for (var message in response) {
+        String senderId = message['sender_id'];
+        if (!messagesBySender.containsKey(senderId)) {
+          messagesBySender[senderId] = [];
+        }
+        messagesBySender[senderId]!.add(message);
+      }
+
+      List<NotificationItem> notificationsList = [];
+      for (final entry in messagesBySender.entries) {
+        final senderId = entry.key;
+        final messagesList = entry.value;
+
+        // Ordenar mensagens do usuário por data decrescente
+        messagesList.sort((a, b) =>
+            DateTime.parse(b['created_at']).compareTo(
+                DateTime.parse(a['created_at'])));
+
+        final lastMessage = messagesList.first;
+
+        try {
+          print(
+              "[DEBUG NotificationsScreen] Processando grupo de $senderId com ${messagesList
+                  .length} mensagens.");
+
+          final userResponse = await Supabase.instance.client
+              .from('users')
+              .select('nickname, avatar_url')
+              .eq('id', senderId)
+              .maybeSingle();
+
+          print(
+              "[DEBUG NotificationsScreen] Dados do usuário $senderId: $userResponse");
+
+          if (userResponse != null) {
+            final notificationItem = NotificationItem(
+              id: lastMessage['id'],
+              // Usa o id da última mensagem como identificador
+              senderId: senderId,
+              senderName: userResponse['nickname'] ?? 'Usuário',
+              senderAvatar: userResponse['avatar_url'] ?? '',
+              lastMessage: lastMessage['message'] ?? 'Nova mensagem',
+              timestamp: DateTime.parse(lastMessage['created_at']),
+              unreadCount: messagesList
+                  .length, // Número de mensagens não lidas deste usuário
+            );
+
+            print(
+                "[DEBUG NotificationsScreen] Criada notificação agrupada para ${notificationItem
+                    .senderName} contendo ${notificationItem
+                    .unreadCount} mensagens");
+            notificationsList.add(notificationItem);
+          } else {
+            print(
+                "[DEBUG NotificationsScreen] Usuário $senderId não encontrado na tabela users");
+          }
+        } catch (e) {
+          print(
+              "[DEBUG NotificationsScreen] Erro ao processar grupo de mensagens: $e");
+        }
+      }
+
+
+      print(
+          "[DEBUG NotificationsScreen] Total de notificações criadas: ${notificationsList
+              .length}");
+
+      if (mounted) {
+        setState(() {
+          notifications = notificationsList;
+          isLoading = false;
+        });
+        print(
+            "[DEBUG NotificationsScreen] Estado atualizado - isLoading: false, notifications: ${notifications
+                .length}");
+      }
+    } catch (e) {
+      print(
+          "[DEBUG NotificationsScreen] ERRO GERAL ao carregar notificações: $e");
+      print("[DEBUG NotificationsScreen] Stack trace: ${StackTrace.current}");
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) {
+      return 'Agora';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d';
+    } else {
+      return '${timestamp.day}/${timestamp.month}';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    print(
+        "[DEBUG NotificationsScreen] build chamado - isLoading: $isLoading, notifications.length: ${notifications
+            .length}");
+
+    return Scaffold(
+      backgroundColor: Colors.black, // Garantir fundo escuro
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Background
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.blueGrey.shade900,
+                      Colors.black87,
+                      Colors.black,
+                    ],
+                  ),
+                ),
+                child: Image.asset(
+                  'assets/gifmaster.gif',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    print(
+                        "[DEBUG NotificationsScreen] Erro ao carregar background: $error");
+                    return Container(
+                      color: Colors.blueGrey.shade900,
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            // Conteúdo principal
+            Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.black.withOpacity(0.7),
+                        Colors.black.withOpacity(0.3),
+                      ],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          print(
+                              "[DEBUG NotificationsScreen] Botão voltar pressionado");
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(
+                            Icons.arrow_back, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Notificações',
+                        style: GoogleFonts.orbitron(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '🔔',
+                        style: TextStyle(fontSize: 24),
+                      ),
+                      const SizedBox(width: 8),
+                      // Contador debug
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${notifications.length}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Lista de notificações
+                Expanded(
+                  child: Container(
+                    color: Colors.transparent,
+                    child: isLoading
+                        ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.cyanAccent),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Carregando notificações...',
+                            style: GoogleFonts.orbitron(
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        : notifications.isEmpty
+                        ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '🔕',
+                            style: TextStyle(fontSize: 64),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Nenhuma notificação',
+                            style: GoogleFonts.orbitron(
+                              fontSize: 18,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Quando alguém te enviar uma mensagem\nvocê verá aqui',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      itemCount: notifications.length,
+                      itemBuilder: (context, index) {
+                        final notification = notifications[index];
+                        print(
+                            "[DEBUG NotificationsScreen] Renderizando item $index: ${notification
+                                .senderName}");
+                        return _buildNotificationItem(notification);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem(NotificationItem notification) {
+    print(
+        "[DEBUG NotificationsScreen] _buildNotificationItem para ${notification
+            .senderName}");
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            print("[DEBUG NotificationsScreen] Item clicado para ${notification
+                .senderName} (${notification.senderId})");
+            print(
+                "[DEBUG NotificationsScreen] Mensagem ID: ${notification.id}");
+
+            // Marcar TODAS as mensagens desse remetente como lidas
+            try {
+              print(
+                  "[DEBUG NotificationsScreen] Marcando TODAS as mensagens desse remetente (${notification
+                      .senderId}) como lidas...");
+
+              await Supabase.instance.client
+                  .from('messages')
+                  .update({'was_read': true})
+                  .eq('sender_id', notification.senderId)
+                  .eq('receiver_id', widget.currentUserId)
+                  .eq('was_read', false);
+
+              print(
+                  "[DEBUG NotificationsScreen] Todas as mensagens desse remetente marcadas como lidas");
+
+              // Remover todas as notificações do remetente da lista local imediatamente
+              if (mounted) {
+                setState(() {
+                  notifications.removeWhere((n) =>
+                  n.senderId == notification.senderId);
+                });
+              }
+            } catch (e) {
+              print(
+                  "[DEBUG NotificationsScreen] Erro ao marcar mensagens como lidas: $e");
+            }
+
+            if (!mounted) {
+              print(
+                  "[DEBUG NotificationsScreen] Widget não está montado, cancelando navegação");
+              return;
+            }
+
+            print(
+                "[DEBUG NotificationsScreen] Abrindo chat com ${notification
+                    .senderName}...");
+
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ChatScreen(
+                      otherUserId: notification.senderId,
+                      otherUserName: notification.senderName,
+                      otherUserAvatar: notification.senderAvatar,
+                    ),
+              ),
+            );
+
+            print("[DEBUG NotificationsScreen] Retornou do chat: $result");
+
+            // Recarregar notificações após voltar do chat para capturar novas mensagens
+            if (mounted) {
+              _loadNotifications();
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Avatar + indicador de não lida/múltiplas mensagens
+                Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      // Aumentar um pouco o avatar
+                      backgroundImage: notification.senderAvatar.isNotEmpty
+                          ? NetworkImage(notification.senderAvatar)
+                          : null,
+                      backgroundColor: Colors.blueGrey.withOpacity(0.4),
+                      onBackgroundImageError: (exception, stackTrace) {
+                        print(
+                            "[DEBUG NotificationsScreen] Erro ao carregar avatar de ${notification
+                                .senderName}: $exception");
+                      },
+                      child: notification.senderAvatar.isEmpty
+                          ? Text(
+                        notification.senderName.isNotEmpty
+                            ? notification.senderName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      )
+                          : null,
+                    ),
+                    // Indicador visual de "Não lida" (single) ou badge numerado
+                    if (notification.unreadCount > 1)
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white, width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.redAccent.withOpacity(0.4),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          constraints: BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            notification.unreadCount > 99
+                                ? '99+'
+                                : '${notification.unreadCount}',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              height: 1.1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    else
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          width: 15,
+                          height: 15,
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.greenAccent.withOpacity(0.4),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                const SizedBox(width: 16),
+
+                // Conteúdo da notificação
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              notification.senderName,
+                              style: GoogleFonts.orbitron(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            _formatTimestamp(notification.timestamp),
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.white.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        notification.lastMessage.isNotEmpty
+                            ? notification.lastMessage
+                            : 'Nova mensagem',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      // Indicador textual de mensagem não lida ou múltiplas
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: notification.unreadCount > 1
+                              ? Colors.redAccent.withOpacity(0.17)
+                              : Colors.cyanAccent.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: notification.unreadCount > 1
+                                  ? Colors.redAccent.withOpacity(0.38)
+                                  : Colors.cyanAccent.withOpacity(0.4)),
+                        ),
+                        child: Text(
+                          notification.unreadCount > 1
+                              ? '${notification.unreadCount} novas mensagens'
+                              : 'Nova mensagem • Não lida',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: notification.unreadCount > 1
+                                ? Colors.redAccent
+                                : Colors.cyanAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Ícone de seta
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.white.withOpacity(0.5),
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class UserBubble {
   final String id;
@@ -210,7 +836,6 @@ class BubblesHomeScreen extends StatefulWidget {
 
 class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     with SingleTickerProviderStateMixin {
-  static const double minDist = 12.0;
   late AnimationController controller;
   final Random random = Random();
   late List<UserBubble> bubbles;
@@ -226,11 +851,47 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
   bool isSearching = false;
   final TransformationController _centerController = TransformationController();
 
+  // Notificações/Contador de não lidas
+  int notificationsCount = 0;
+  bool isLoadingNotifications = false;
+
   bool get isLoggedIn {
     final user = Supabase.instance.client.auth.currentUser;
     return user != null;
   }
 
+  // Carrega notificações de novos chats/mensagens: Contador e lista para badge
+  Future<void> _loadNotificationBadgeCount() async {
+    print(
+        "[DEBUG] _loadNotificationBadgeCount iniciado para userId: $currentUserId");
+
+    if (currentUserId.isEmpty) {
+      print("[DEBUG] currentUserId vazio, setando contador para 0");
+      if (mounted) setState(() => notificationsCount = 0);
+      return;
+    }
+
+    try {
+      final res = await Supabase.instance.client
+          .from('messages')
+          .select('id') // Só precisamos contar
+          .eq('receiver_id', currentUserId)
+          .eq('was_read', false);
+
+      print("[DEBUG] Query resultado: ${res.length} mensagens não lidas");
+
+      if (mounted) setState(() {
+        notificationsCount = res.length; // Contar total de mensagens
+        print(
+            "[DEBUG] notificationsCount atualizado para: $notificationsCount");
+      });
+    } catch (e) {
+      print("[DEBUG] Erro em _loadNotificationBadgeCount: $e");
+      if (mounted) setState(() => notificationsCount = 0);
+    }
+  }
+
+  // Pega lista de remetentes (usado em _loadAllUsersBubbles para badge nas bolhas)
   Future<Set<String>> _buscarNotificantes() async {
     try {
       final res = await Supabase.instance.client
@@ -584,6 +1245,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           });
           _carregarMeuPerfil();
           _loadAllUsersBubbles();
+          _loadNotificationBadgeCount();
         }
       } else if (event == AuthChangeEvent.signedOut) {
         if (mounted) {
@@ -592,6 +1254,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
             currentUserName = '';
             currentUserAvatar = '';
             profileLoaded = false;
+            notificationsCount = 0;
             print("[DEBUG] User signed out");
           });
         }
@@ -606,6 +1269,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       ..addListener(_moveBubblesPhysics)
       ..repeat(period: const Duration(milliseconds: 30));
     _loadAllUsersBubbles();
+    _loadNotificationBadgeCount();
 
     // Timer para atualizar status de live a cada 15 segundos (mais rápido)
     Timer.periodic(const Duration(seconds: 15), (timer) {
@@ -620,6 +1284,16 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     Timer.periodic(const Duration(seconds: 60), (timer) {
       if (mounted) {
         _checkForNewUsers();
+        _loadNotificationBadgeCount();
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // Timer específico para notificações a cada 30 segundos
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadNotificationBadgeCount();
       } else {
         timer.cancel();
       }
@@ -736,8 +1410,9 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         ),
       ),
     );
-    // Atualizar apenas status de live após voltar do chat
+    // Atualizar status de live e notificações após voltar do chat
     _updateLiveStatus();
+    _loadNotificationBadgeCount();
   }
 
   void _onMyProfileTap() async {
@@ -747,8 +1422,9 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     await Navigator.push(context, MaterialPageRoute(
         builder: (_) => ProfileSetupScreen(userIdOverride: currentUserId)));
 
-    // Atualizar status de live após voltar do perfil (pode ter iniciado/parado live)
+    // Atualizar status de live e notificações após voltar do perfil (pode ter iniciado/parado live)
     _updateLiveStatus();
+    _loadNotificationBadgeCount();
   }
 
   List<UserBubble> get bubblesFiltered {
@@ -764,17 +1440,13 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
   void _centralizarBolhaPesquisadaV2() {
     if (!mounted) return;
 
-    final w = MediaQuery.of(context).size.width;
-    final h = MediaQuery.of(context).size.height;
-    final topBarHeightAdjusted = kTopBarHeight + (isSearching ? kSearchBarHeight : 0.0);
-    final availableH = h - topBarHeightAdjusted;
-
     if (!isSearching || bubblesFiltered.isEmpty) {
       if (_bolhasOriginaisPosicoes != null) {
         for (final b in bubbles) {
-          if (_bolhasOriginaisPosicoes!.containsKey(b.id)) {
-            b.x = _bolhasOriginaisPosicoes![b.id]!.dx;
-            b.y = _bolhasOriginaisPosicoes![b.id]!.dy;
+          final originalPos = _bolhasOriginaisPosicoes?[b.id];
+          if (originalPos != null) {
+            b.x = originalPos.dx;
+            b.y = originalPos.dy;
           }
         }
         _bolhasOriginaisPosicoes = null;
@@ -816,23 +1488,25 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
       for (final bubble in bubbles) {
         if (liveUsersMap.containsKey(bubble.id)) {
-          final userData = liveUsersMap[bubble.id]!;
-          final wasLive = bubble.isLive;
-          final isNowLive = userData['is_live'] as bool;
+          final userData = liveUsersMap[bubble.id];
+          if (userData != null) {
+            final wasLive = bubble.isLive;
+            final isNowLive = userData['is_live'] as bool;
 
-          if (wasLive != isNowLive) {
-            hasChanges = true;
-            bubble.isLive = isNowLive;
-            bubble.liveChannel = userData['live_channel'];
+            if (wasLive != isNowLive) {
+              hasChanges = true;
+              bubble.isLive = isNowLive;
+              bubble.liveChannel = userData['live_channel'];
 
-            if (isNowLive) {
+              if (isNowLive) {
+                liveCount++;
+                print("[DEBUG] Usuário ${bubble.name} iniciou live");
+              } else {
+                print("[DEBUG] Usuário ${bubble.name} parou live");
+              }
+            } else if (isNowLive) {
               liveCount++;
-              print("[DEBUG] Usuário ${bubble.name} iniciou live");
-            } else {
-              print("[DEBUG] Usuário ${bubble.name} parou live");
             }
-          } else if (isNowLive) {
-            liveCount++;
           }
         }
       }
@@ -847,6 +1521,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     } catch (e) {
       print("[DEBUG] Erro em _updateLiveStatus: $e");
     }
+    // Atualiza também notificações
+    _loadNotificationBadgeCount();
   }
 
   @override
@@ -854,6 +1530,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     final w = MediaQuery.of(context).size.width;
     final h = MediaQuery.of(context).size.height;
     final bool loggedIn = isLoggedIn;
+
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -868,7 +1545,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
               ),
             ),
 
-            // Top bar com perfil e busca
+            // Top bar com perfil, sino de notificações e busca
             if (loggedIn)
               Positioned(
                 top: 0,
@@ -909,6 +1586,31 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                             style: const TextStyle(fontSize: 17,
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600)),
+                      ),
+                      // Botão do sino de notificação com badge
+                      Builder(
+                        builder: (context) {
+                          return NotificationBell(
+                            count: notificationsCount,
+                            onTap: () async {
+                              print(
+                                  "[DEBUG] NotificationBell clicado! Count: $notificationsCount");
+                              // Abrir tela de notificações
+                              if (!mounted) return;
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      NotificationsScreen(
+                                          currentUserId: currentUserId),
+                                ),
+                              );
+                              if (mounted) {
+                                _loadNotificationBadgeCount();
+                              }
+                            },
+                          );
+                        },
                       ),
                       IconButton(
                         icon: const Text('🔎', style: TextStyle(fontSize: 24)),
@@ -1536,6 +2238,129 @@ class _LiveIndicatorWidgetState extends State<_LiveIndicatorWidget>
 
 const double kTopBarHeight = 87.0;
 const double kSearchBarHeight = 67.0;
+
+// Widget do sino de notificação com badge (contador vermelho)
+class NotificationBell extends StatefulWidget {
+  final int count;
+  final VoidCallback onTap;
+
+  const NotificationBell({
+    Key? key,
+    required this.count,
+    required this.onTap,
+  }) : super(key: key);
+
+  @override
+  State<NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<NotificationBell>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _pulseAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Iniciar animação se há notificações
+    if (widget.count > 0) {
+      _animationController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(NotificationBell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Controlar animação baseado no contador
+    if (widget.count > 0 && oldWidget.count == 0) {
+      _animationController.repeat(reverse: true);
+    } else if (widget.count == 0 && oldWidget.count > 0) {
+      _animationController.stop();
+      _animationController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Sino sempre visível
+        IconButton(
+          icon: const Icon(Icons.notifications, color: Colors.white, size: 28),
+          onPressed: () {
+            print(
+                "[DEBUG NotificationBell] IconButton pressionado! Count: ${widget
+                    .count}");
+            widget.onTap();
+          },
+        ),
+        // Badge só aparece quando há notificações
+        if (widget.count > 0)
+          AnimatedBuilder(
+            animation: _pulseAnimation,
+            builder: (context, child) {
+              return Positioned(
+                right: 8,
+                top: 10,
+                child: Transform.scale(
+                  scale: _pulseAnimation.value,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.redAccent.withOpacity(0.6),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 22,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      widget.count > 99 ? '99+' : widget.count.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10.5,
+                        height: 1,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
 
 // Login/Register Toggle widget
 class _LoginRegisterFormWidget extends StatefulWidget {
@@ -2551,8 +3376,11 @@ class BubblesPainter extends CustomPainter {
               (b) => b.id == bubblesFiltered.first.id,
           orElse: () => bubblesFiltered.first
       );
-      bolhasParaDesenhar.addAll(bubbles.where((b) => b.id != searchedBubbleInstance!.id));
-      bolhasParaDesenhar.add(searchedBubbleInstance!);
+      final searchedId = searchedBubbleInstance?.id;
+      if (searchedId != null) {
+        bolhasParaDesenhar.addAll(bubbles.where((b) => b.id != searchedId));
+        bolhasParaDesenhar.add(searchedBubbleInstance!);
+      }
     } else {
       bolhasParaDesenhar.addAll(bubbles);
     }
@@ -2566,7 +3394,7 @@ class BubblesPainter extends CustomPainter {
 
       bool isThisTheSearchedBubble = isSearching &&
           searchedBubbleInstance != null &&
-          bubble.id == searchedBubbleInstance!.id;
+          bubble.id == searchedBubbleInstance?.id;
 
       double drawSize = isSpecial ? baseSize * 1.18 : baseSize * 0.65;
       if (isThisTheSearchedBubble && !isSpecial) drawSize = baseSize * 1.55;
