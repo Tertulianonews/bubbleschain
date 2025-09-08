@@ -116,6 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       errorMsg = null;
       infoMsg = null;
     });
+
     if (_pwd.text.trim() != _pwdRepeat.text.trim()) {
       setState(() {
         errorMsg = 'As senhas não coincidem.';

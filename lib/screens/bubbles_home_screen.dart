@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
+import 'dart:typed_data'; // Para Uint8List e ByteData
 
 // Timer is used in this file. dart:async import ensures Timer works.
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; // Para DefaultAssetBundle
 import 'profile_setup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart';
@@ -14,13 +14,641 @@ import 'bubble_game_screen.dart';
 import 'package:http/http.dart' as http;
 import 'terlinet_word_screen.dart';
 import 'channels_screen.dart';
-import '../theme.dart';
 import '../widgets/live_video_widget.dart';
-import '../widgets/live_preview_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'register_screen.dart';
 import 'terms_privacy_screen.dart';
 import '../widgets/pepe_logo.dart';
+
+// Modelo para notificação
+class NotificationItem {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String senderAvatar;
+  final String lastMessage;
+  final DateTime timestamp;
+  final int unreadCount;
+
+  NotificationItem({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.senderAvatar,
+    required this.lastMessage,
+    required this.timestamp,
+    required this.unreadCount,
+  });
+}
+
+// Widget para a tela de notificações
+class NotificationsScreen extends StatefulWidget {
+  final String currentUserId;
+
+  const NotificationsScreen({Key? key, required this.currentUserId})
+      : super(key: key);
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  List<NotificationItem> notifications = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    print(
+        "[DEBUG NotificationsScreen] _loadNotifications iniciado para userId: ${widget
+            .currentUserId}");
+
+    if (!mounted) return;
+
+    try {
+      // Buscar mensagens não lidas individualmente, exibindo cada mensagem como uma notificação separada (não mais agrupadas por remetente)
+      print(
+          "[DEBUG NotificationsScreen] Fazendo query para mensagens não lidas...");
+
+      final response = await Supabase.instance.client
+          .from('messages')
+          .select('*')
+          .eq('receiver_id', widget.currentUserId)
+          .eq('was_read', false)
+          .order('created_at', ascending: false);
+
+      print("[DEBUG NotificationsScreen] Resposta da query: ${response
+          .length} mensagens");
+      print("[DEBUG NotificationsScreen] Dados: $response");
+
+      if (!mounted) return;
+
+      // Agrupar mensagens não lidas por remetente para criar uma notificação por usuário
+      Map<String, List<dynamic>> messagesBySender = {};
+
+      for (var message in response) {
+        String senderId = message['sender_id'];
+        if (!messagesBySender.containsKey(senderId)) {
+          messagesBySender[senderId] = [];
+        }
+        messagesBySender[senderId]!.add(message);
+      }
+
+      List<NotificationItem> notificationsList = [];
+      for (final entry in messagesBySender.entries) {
+        final senderId = entry.key;
+        final messagesList = entry.value;
+
+        // Ordenar mensagens do usuário por data decrescente
+        messagesList.sort((a, b) =>
+            DateTime.parse(b['created_at']).compareTo(
+                DateTime.parse(a['created_at'])));
+
+        final lastMessage = messagesList.first;
+
+        try {
+          print(
+              "[DEBUG NotificationsScreen] Processando grupo de $senderId com ${messagesList
+                  .length} mensagens.");
+
+          final userResponse = await Supabase.instance.client
+              .from('users')
+              .select('nickname, avatar_url')
+              .eq('id', senderId)
+              .maybeSingle();
+
+          print(
+              "[DEBUG NotificationsScreen] Dados do usuário $senderId: $userResponse");
+
+          if (userResponse != null) {
+            final notificationItem = NotificationItem(
+              id: lastMessage['id'],
+              // Usa o id da última mensagem como identificador
+              senderId: senderId,
+              senderName: userResponse['nickname'] ?? 'Usuário',
+              senderAvatar: userResponse['avatar_url'] ?? '',
+              lastMessage: lastMessage['message'] ?? 'Nova mensagem',
+              timestamp: DateTime.parse(lastMessage['created_at']),
+              unreadCount: messagesList
+                  .length, // Número de mensagens não lidas deste usuário
+            );
+
+            print(
+                "[DEBUG NotificationsScreen] Criada notificação agrupada para ${notificationItem
+                    .senderName} contendo ${notificationItem
+                    .unreadCount} mensagens");
+            notificationsList.add(notificationItem);
+          } else {
+            print(
+                "[DEBUG NotificationsScreen] Usuário $senderId não encontrado na tabela users");
+          }
+        } catch (e) {
+          print(
+              "[DEBUG NotificationsScreen] Erro ao processar grupo de mensagens: $e");
+        }
+      }
+
+
+      print(
+          "[DEBUG NotificationsScreen] Total de notificações criadas: ${notificationsList
+              .length}");
+
+      if (mounted) {
+        setState(() {
+          notifications = notificationsList;
+          isLoading = false;
+        });
+        print(
+            "[DEBUG NotificationsScreen] Estado atualizado - isLoading: false, notifications: ${notifications
+                .length}");
+      }
+    } catch (e) {
+      print(
+          "[DEBUG NotificationsScreen] ERRO GERAL ao carregar notificações: $e");
+      print("[DEBUG NotificationsScreen] Stack trace: ${StackTrace.current}");
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) {
+      return 'Agora';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d';
+    } else {
+      return '${timestamp.day}/${timestamp.month}';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    print(
+        "[DEBUG NotificationsScreen] build chamado - isLoading: $isLoading, notifications.length: ${notifications
+            .length}");
+
+    return Scaffold(
+      backgroundColor: Colors.black, // Garantir fundo escuro
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Background
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.blueGrey.shade900,
+                      Colors.black87,
+                      Colors.black,
+                    ],
+                  ),
+                ),
+                child: Image.asset(
+                  'assets/gifmaster.gif',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    print(
+                        "[DEBUG NotificationsScreen] Erro ao carregar background: $error");
+                    return Container(
+                      color: Colors.blueGrey.shade900,
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            // Conteúdo principal
+            Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.black.withOpacity(0.7),
+                        Colors.black.withOpacity(0.3),
+                      ],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          print(
+                              "[DEBUG NotificationsScreen] Botão voltar pressionado");
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(
+                            Icons.arrow_back, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Notificações',
+                        style: GoogleFonts.orbitron(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '🔔',
+                        style: TextStyle(fontSize: 24),
+                      ),
+                      const SizedBox(width: 8),
+                      // Contador debug
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${notifications.length}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Lista de notificações
+                Expanded(
+                  child: Container(
+                    color: Colors.transparent,
+                    child: isLoading
+                        ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.cyanAccent),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Carregando notificações...',
+                            style: GoogleFonts.orbitron(
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        : notifications.isEmpty
+                        ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '🔕',
+                            style: TextStyle(fontSize: 64),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Nenhuma notificação',
+                            style: GoogleFonts.orbitron(
+                              fontSize: 18,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Quando alguém te enviar uma mensagem\nvocê verá aqui',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                        : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      itemCount: notifications.length,
+                      itemBuilder: (context, index) {
+                        final notification = notifications[index];
+                        print(
+                            "[DEBUG NotificationsScreen] Renderizando item $index: ${notification
+                                .senderName}");
+                        return _buildNotificationItem(notification);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem(NotificationItem notification) {
+    print(
+        "[DEBUG NotificationsScreen] _buildNotificationItem para ${notification
+            .senderName}");
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            print("[DEBUG NotificationsScreen] Item clicado para ${notification
+                .senderName} (${notification.senderId})");
+            print(
+                "[DEBUG NotificationsScreen] Mensagem ID: ${notification.id}");
+
+            // Marcar TODAS as mensagens desse remetente como lidas
+            try {
+              print(
+                  "[DEBUG NotificationsScreen] Marcando TODAS as mensagens desse remetente (${notification
+                      .senderId}) como lidas...");
+
+              await Supabase.instance.client
+                  .from('messages')
+                  .update({'was_read': true})
+                  .eq('sender_id', notification.senderId)
+                  .eq('receiver_id', widget.currentUserId)
+                  .eq('was_read', false);
+
+              print(
+                  "[DEBUG NotificationsScreen] Todas as mensagens desse remetente marcadas como lidas");
+
+              // Remover todas as notificações do remetente da lista local imediatamente
+              if (mounted) {
+                setState(() {
+                  notifications.removeWhere((n) =>
+                  n.senderId == notification.senderId);
+                });
+              }
+            } catch (e) {
+              print(
+                  "[DEBUG NotificationsScreen] Erro ao marcar mensagens como lidas: $e");
+            }
+
+            if (!mounted) {
+              print(
+                  "[DEBUG NotificationsScreen] Widget não está montado, cancelando navegação");
+              return;
+            }
+
+            print(
+                "[DEBUG NotificationsScreen] Abrindo chat com ${notification
+                    .senderName}...");
+
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ChatScreen(
+                      otherUserId: notification.senderId,
+                      otherUserName: notification.senderName,
+                      otherUserAvatar: notification.senderAvatar,
+                    ),
+              ),
+            );
+
+            print("[DEBUG NotificationsScreen] Retornou do chat: $result");
+
+            // Recarregar notificações após voltar do chat para capturar novas mensagens
+            if (mounted) {
+              _loadNotifications();
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Avatar + indicador de não lida/múltiplas mensagens
+                Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      // Aumentar um pouco o avatar
+                      backgroundImage: notification.senderAvatar.isNotEmpty
+                          ? NetworkImage(notification.senderAvatar)
+                          : null,
+                      backgroundColor: Colors.blueGrey.withOpacity(0.4),
+                      onBackgroundImageError: (exception, stackTrace) {
+                        print(
+                            "[DEBUG NotificationsScreen] Erro ao carregar avatar de ${notification
+                                .senderName}: $exception");
+                      },
+                      child: notification.senderAvatar.isEmpty
+                          ? Text(
+                        notification.senderName.isNotEmpty
+                            ? notification.senderName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      )
+                          : null,
+                    ),
+                    // Indicador visual de "Não lida" (single) ou badge numerado
+                    if (notification.unreadCount > 1)
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white, width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.redAccent.withOpacity(0.4),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          constraints: BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            notification.unreadCount > 99
+                                ? '99+'
+                                : '${notification.unreadCount}',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              height: 1.1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    else
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          width: 15,
+                          height: 15,
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.greenAccent.withOpacity(0.4),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                const SizedBox(width: 16),
+
+                // Conteúdo da notificação
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              notification.senderName,
+                              style: GoogleFonts.orbitron(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            _formatTimestamp(notification.timestamp),
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.white.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        notification.lastMessage.isNotEmpty
+                            ? notification.lastMessage
+                            : 'Nova mensagem',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      // Indicador textual de mensagem não lida ou múltiplas
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: notification.unreadCount > 1
+                              ? Colors.redAccent.withOpacity(0.17)
+                              : Colors.cyanAccent.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: notification.unreadCount > 1
+                                  ? Colors.redAccent.withOpacity(0.38)
+                                  : Colors.cyanAccent.withOpacity(0.4)),
+                        ),
+                        child: Text(
+                          notification.unreadCount > 1
+                              ? '${notification.unreadCount} novas mensagens'
+                              : 'Nova mensagem • Não lida',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: notification.unreadCount > 1
+                                ? Colors.redAccent
+                                : Colors.cyanAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Ícone de seta
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.white.withOpacity(0.5),
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class UserBubble {
   final String id;
@@ -210,7 +838,6 @@ class BubblesHomeScreen extends StatefulWidget {
 
 class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     with SingleTickerProviderStateMixin {
-  static const double minDist = 12.0;
   late AnimationController controller;
   final Random random = Random();
   late List<UserBubble> bubbles;
@@ -226,11 +853,47 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
   bool isSearching = false;
   final TransformationController _centerController = TransformationController();
 
+  // Notificações/Contador de não lidas
+  int notificationsCount = 0;
+  bool isLoadingNotifications = false;
+
   bool get isLoggedIn {
     final user = Supabase.instance.client.auth.currentUser;
     return user != null;
   }
 
+  // Carrega notificações de novos chats/mensagens: Contador e lista para badge
+  Future<void> _loadNotificationBadgeCount() async {
+    print(
+        "[DEBUG] _loadNotificationBadgeCount iniciado para userId: $currentUserId");
+
+    if (currentUserId.isEmpty) {
+      print("[DEBUG] currentUserId vazio, setando contador para 0");
+      if (mounted) setState(() => notificationsCount = 0);
+      return;
+    }
+
+    try {
+      final res = await Supabase.instance.client
+          .from('messages')
+          .select('id') // Só precisamos contar
+          .eq('receiver_id', currentUserId)
+          .eq('was_read', false);
+
+      print("[DEBUG] Query resultado: ${res.length} mensagens não lidas");
+
+      if (mounted) setState(() {
+        notificationsCount = res.length; // Contar total de mensagens
+        print(
+            "[DEBUG] notificationsCount atualizado para: $notificationsCount");
+      });
+    } catch (e) {
+      print("[DEBUG] Erro em _loadNotificationBadgeCount: $e");
+      if (mounted) setState(() => notificationsCount = 0);
+    }
+  }
+
+  // Pega lista de remetentes (usado em _loadAllUsersBubbles para badge nas bolhas)
   Future<Set<String>> _buscarNotificantes() async {
     try {
       final res = await Supabase.instance.client
@@ -502,6 +1165,25 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
               isSocial: true,
             ),
           );
+          // Adiciona a bolha TRON (nova bolha social especial épica)
+          bubbles.add(
+            UserBubble(
+              id: 'tron_bubble',
+              name: 'TRON',
+              avatarUrl: 'assets/assets/TRONGIF.gif',
+              // Usar o GIF TRON como avatar
+              x: 0.81,
+              y: 0.75,
+              dx: 0,
+              dy: 0,
+              size: 60,
+              color: Color(0xFFFF0000),
+              // Vermelho TRON oficial
+              isSocial: true,
+            ),
+          );
+          // Carregar imagem do GIF TRON
+          _loadAvatarImage(bubbles.last);
           print("[DEBUG] Bolhas carregadas. Total: ${bubbles.length}");
         });
       }
@@ -521,9 +1203,12 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     if (bubble.avatarUrl.isEmpty) return;
     if (_bubbleImages.containsKey(bubble.id)) return;
     try {
-      final response = await http.get(Uri.parse(bubble.avatarUrl));
-      if (response.statusCode == 200) {
-        final bytes = response.bodyBytes;
+      // Verifica se é um asset local
+      if (bubble.avatarUrl.startsWith('assets/')) {
+        // Carrega asset local
+        final ByteData data = await DefaultAssetBundle.of(context).load(
+            bubble.avatarUrl);
+        final Uint8List bytes = data.buffer.asUint8List();
         final codec = await ui.instantiateImageCodec(bytes);
         final frame = await codec.getNextFrame();
         if (mounted) {
@@ -532,8 +1217,22 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           });
         }
       } else {
-        print("[DEBUG] Falha ao carregar avatar de ${bubble.name}: Status ${response.statusCode}");
-        _bubbleImages[bubble.id] = null;
+        // Carrega URL remota
+        final response = await http.get(Uri.parse(bubble.avatarUrl));
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          if (mounted) {
+            setState(() {
+              _bubbleImages[bubble.id] = frame.image;
+            });
+          }
+        } else {
+          print("[DEBUG] Falha ao carregar avatar de ${bubble
+              .name}: Status ${response.statusCode}");
+          _bubbleImages[bubble.id] = null;
+        }
       }
     } catch (e) {
       print("[DEBUG] Erro ao carregar avatar de ${bubble.name}: $e");
@@ -584,6 +1283,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           });
           _carregarMeuPerfil();
           _loadAllUsersBubbles();
+          _loadNotificationBadgeCount();
         }
       } else if (event == AuthChangeEvent.signedOut) {
         if (mounted) {
@@ -592,6 +1292,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
             currentUserName = '';
             currentUserAvatar = '';
             profileLoaded = false;
+            notificationsCount = 0;
             print("[DEBUG] User signed out");
           });
         }
@@ -606,6 +1307,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       ..addListener(_moveBubblesPhysics)
       ..repeat(period: const Duration(milliseconds: 30));
     _loadAllUsersBubbles();
+    _loadNotificationBadgeCount();
 
     // Timer para atualizar status de live a cada 15 segundos (mais rápido)
     Timer.periodic(const Duration(seconds: 15), (timer) {
@@ -620,6 +1322,16 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     Timer.periodic(const Duration(seconds: 60), (timer) {
       if (mounted) {
         _checkForNewUsers();
+        _loadNotificationBadgeCount();
+      } else {
+        timer.cancel();
+      }
+    });
+
+    // Timer específico para notificações a cada 30 segundos
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadNotificationBadgeCount();
       } else {
         timer.cancel();
       }
@@ -683,6 +1395,12 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       return;
     }
 
+    // Verificação e ação para TRON
+    if (user.id == 'tron_bubble') {
+      await launchUrl(Uri.parse('https://tron.network/'));
+      return;
+    }
+
     try {
       final social = await Supabase.instance.client
           .from('socialBubbles')
@@ -736,8 +1454,9 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         ),
       ),
     );
-    // Atualizar apenas status de live após voltar do chat
+    // Atualizar status de live e notificações após voltar do chat
     _updateLiveStatus();
+    _loadNotificationBadgeCount();
   }
 
   void _onMyProfileTap() async {
@@ -747,8 +1466,9 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     await Navigator.push(context, MaterialPageRoute(
         builder: (_) => ProfileSetupScreen(userIdOverride: currentUserId)));
 
-    // Atualizar status de live após voltar do perfil (pode ter iniciado/parado live)
+    // Atualizar status de live e notificações após voltar do perfil (pode ter iniciado/parado live)
     _updateLiveStatus();
+    _loadNotificationBadgeCount();
   }
 
   List<UserBubble> get bubblesFiltered {
@@ -764,17 +1484,13 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
   void _centralizarBolhaPesquisadaV2() {
     if (!mounted) return;
 
-    final w = MediaQuery.of(context).size.width;
-    final h = MediaQuery.of(context).size.height;
-    final topBarHeightAdjusted = kTopBarHeight + (isSearching ? kSearchBarHeight : 0.0);
-    final availableH = h - topBarHeightAdjusted;
-
     if (!isSearching || bubblesFiltered.isEmpty) {
       if (_bolhasOriginaisPosicoes != null) {
         for (final b in bubbles) {
-          if (_bolhasOriginaisPosicoes!.containsKey(b.id)) {
-            b.x = _bolhasOriginaisPosicoes![b.id]!.dx;
-            b.y = _bolhasOriginaisPosicoes![b.id]!.dy;
+          final originalPos = _bolhasOriginaisPosicoes?[b.id];
+          if (originalPos != null) {
+            b.x = originalPos.dx;
+            b.y = originalPos.dy;
           }
         }
         _bolhasOriginaisPosicoes = null;
@@ -816,23 +1532,25 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
       for (final bubble in bubbles) {
         if (liveUsersMap.containsKey(bubble.id)) {
-          final userData = liveUsersMap[bubble.id]!;
-          final wasLive = bubble.isLive;
-          final isNowLive = userData['is_live'] as bool;
+          final userData = liveUsersMap[bubble.id];
+          if (userData != null) {
+            final wasLive = bubble.isLive;
+            final isNowLive = userData['is_live'] as bool;
 
-          if (wasLive != isNowLive) {
-            hasChanges = true;
-            bubble.isLive = isNowLive;
-            bubble.liveChannel = userData['live_channel'];
+            if (wasLive != isNowLive) {
+              hasChanges = true;
+              bubble.isLive = isNowLive;
+              bubble.liveChannel = userData['live_channel'];
 
-            if (isNowLive) {
+              if (isNowLive) {
+                liveCount++;
+                print("[DEBUG] Usuário ${bubble.name} iniciou live");
+              } else {
+                print("[DEBUG] Usuário ${bubble.name} parou live");
+              }
+            } else if (isNowLive) {
               liveCount++;
-              print("[DEBUG] Usuário ${bubble.name} iniciou live");
-            } else {
-              print("[DEBUG] Usuário ${bubble.name} parou live");
             }
-          } else if (isNowLive) {
-            liveCount++;
           }
         }
       }
@@ -847,6 +1565,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     } catch (e) {
       print("[DEBUG] Erro em _updateLiveStatus: $e");
     }
+    // Atualiza também notificações
+    _loadNotificationBadgeCount();
   }
 
   @override
@@ -854,6 +1574,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     final w = MediaQuery.of(context).size.width;
     final h = MediaQuery.of(context).size.height;
     final bool loggedIn = isLoggedIn;
+
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -868,7 +1589,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
               ),
             ),
 
-            // Top bar com perfil e busca
+            // Top bar com perfil, sino de notificações e busca
             if (loggedIn)
               Positioned(
                 top: 0,
@@ -909,6 +1630,31 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                             style: const TextStyle(fontSize: 17,
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600)),
+                      ),
+                      // Botão do sino de notificação com badge
+                      Builder(
+                        builder: (context) {
+                          return NotificationBell(
+                            count: notificationsCount,
+                            onTap: () async {
+                              print(
+                                  "[DEBUG] NotificationBell clicado! Count: $notificationsCount");
+                              // Abrir tela de notificações
+                              if (!mounted) return;
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      NotificationsScreen(
+                                          currentUserId: currentUserId),
+                                ),
+                              );
+                              if (mounted) {
+                                _loadNotificationBadgeCount();
+                              }
+                            },
+                          );
+                        },
                       ),
                       IconButton(
                         icon: const Text('🔎', style: TextStyle(fontSize: 24)),
@@ -1138,7 +1884,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                   'game_bubble' ||
                                   bubble.id == 'terlinet_word' ||
                                   bubble.id == 'bitcoin_bubble' ||
-                                  bubble.id == 'canais_bubble';
+                                  bubble.id == 'canais_bubble' ||
+                                  bubble.id == 'tron_bubble';
                               double baseSize = isSpecial ? 60.0 : bubble.size;
 
                               bool isThisTheSearchedBubble = isSearching &&
@@ -1179,6 +1926,9 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                       builder: (_) => ChannelsScreen(),
                                     ),
                                   );
+                                } else if (bubble.id == 'tron_bubble') {
+                                  await launchUrl(
+                                      Uri.parse('https://tron.network/'));
                                 } else {
                                   _onBubbleTap(bubble);
                                 }
@@ -1537,6 +2287,129 @@ class _LiveIndicatorWidgetState extends State<_LiveIndicatorWidget>
 const double kTopBarHeight = 87.0;
 const double kSearchBarHeight = 67.0;
 
+// Widget do sino de notificação com badge (contador vermelho)
+class NotificationBell extends StatefulWidget {
+  final int count;
+  final VoidCallback onTap;
+
+  const NotificationBell({
+    Key? key,
+    required this.count,
+    required this.onTap,
+  }) : super(key: key);
+
+  @override
+  State<NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<NotificationBell>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _pulseAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Iniciar animação se há notificações
+    if (widget.count > 0) {
+      _animationController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(NotificationBell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Controlar animação baseado no contador
+    if (widget.count > 0 && oldWidget.count == 0) {
+      _animationController.repeat(reverse: true);
+    } else if (widget.count == 0 && oldWidget.count > 0) {
+      _animationController.stop();
+      _animationController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Sino sempre visível
+        IconButton(
+          icon: const Icon(Icons.notifications, color: Colors.white, size: 28),
+          onPressed: () {
+            print(
+                "[DEBUG NotificationBell] IconButton pressionado! Count: ${widget
+                    .count}");
+            widget.onTap();
+          },
+        ),
+        // Badge só aparece quando há notificações
+        if (widget.count > 0)
+          AnimatedBuilder(
+            animation: _pulseAnimation,
+            builder: (context, child) {
+              return Positioned(
+                right: 8,
+                top: 10,
+                child: Transform.scale(
+                  scale: _pulseAnimation.value,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.redAccent.withOpacity(0.6),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 22,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      widget.count > 99 ? '99+' : widget.count.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10.5,
+                        height: 1,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
 // Login/Register Toggle widget
 class _LoginRegisterFormWidget extends StatefulWidget {
   @override
@@ -1549,9 +2422,10 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
   int _mode = 0; // 0 = login, 1 = cadastro
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
   bool _showPassword = false;
+  bool _showConfirmPassword = false;
   String? _errorMsg;
 
   // Animation controller for particle system
@@ -1720,15 +2594,6 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
     });
 
     // Validações básicas
-    if (_nameController.text
-        .trim()
-        .isEmpty) {
-      setState(() {
-        _errorMsg = "Por favor, informe um nome público.";
-        _isLoading = false;
-      });
-      return;
-    }
 
     if (_emailController.text
         .trim()
@@ -1748,6 +2613,14 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
       return;
     }
 
+    if (_confirmPasswordController.text != _passwordController.text) {
+      setState(() {
+        _errorMsg = "As senhas não conferem.";
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       final res = await Supabase.instance.client.auth.signUp(
         email: _emailController.text.trim(),
@@ -1760,7 +2633,7 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
         try {
           await Supabase.instance.client.from('users').insert({
             'id': res.user!.id,
-            'nickname': _nameController.text.trim(),
+            'nickname': null,
             'avatar_url': null,
             'is_live': false,
             'live_channel': null,
@@ -1776,9 +2649,9 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
         });
 
         // Limpar campos após sucesso
-        _nameController.clear();
         _emailController.clear();
         _passwordController.clear();
+        _confirmPasswordController.clear();
 
         // Voltar para modo login após 3 segundos
         Timer(Duration(seconds: 3), () {
@@ -1818,7 +2691,7 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _nameController.dispose();
+    _confirmPasswordController.dispose();
     _particleController.dispose();
     super.dispose();
   }
@@ -1847,44 +2720,6 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
         // Login form content atop particles
         Column(
           children: [
-            if (_mode == 1)
-            // Campo nome/nickname para cadastro
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.3), width: 1.5),
-                    ),
-                    child: TextField(
-                      controller: _nameController,
-                      enabled: !_isLoading,
-                      style: GoogleFonts.orbitron(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      cursorColor: kBubblesBlue,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.transparent,
-                        labelText: "Nome público",
-                        labelStyle: TextStyle(
-                            color: Colors.white.withOpacity(0.8)),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 22),
-                      ),
-                      textInputAction: TextInputAction.next,
-                    ),
-                  ),
-                ),
-              ),
-            if (_mode == 1)
-              SizedBox(height: 12),
             // Email
             ClipRRect(
               borderRadius: BorderRadius.circular(18),
@@ -1968,6 +2803,58 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
                 ),
               ),
             ),
+            // Confirmar senha (apenas modo cadastro)
+            if (_mode == 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 12.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.3), width: 1.5),
+                      ),
+                      child: TextField(
+                        controller: _confirmPasswordController,
+                        enabled: !_isLoading,
+                        obscureText: !_showConfirmPassword,
+                        style: GoogleFonts.orbitron(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        cursorColor: kBubblesBlue,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.transparent,
+                          labelText: "Confirmar senha",
+                          labelStyle: TextStyle(
+                              color: Colors.white.withOpacity(0.8)),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 18),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _showConfirmPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _showConfirmPassword = !_showConfirmPassword;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (_mode == 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 0),
@@ -2538,6 +3425,82 @@ class BubblesPainter extends CustomPainter {
     canvas.drawCircle(Offset.zero, size * 0.1, centerPaint);
   }
 
+  // TRON Special Effects - Fragmentos vermelhos épicos inspirados na imagem
+  void _drawTronSpecialEffect(Canvas canvas, UserBubble bubble, double left,
+      double top, double drawSize, double opacity) {
+    // Otimização: Reduzir complexidade se a opacidade for muito baixa
+    if (opacity < 0.1) return;
+
+    final double time = DateTime
+        .now()
+        .millisecondsSinceEpoch / 1000.0;
+    final double centerX = left + drawSize / 2;
+    final double centerY = top + drawSize / 2;
+
+    // EFEITO SIMPLIFICADO: Apenas partículas minúsculas de diamante orbitando ao redor da bolha TRON
+    final int diamondParticles = 12; // Número de partículas de diamante
+    final double orbitRadius = drawSize * 0.65; // Raio da órbita das partículas
+
+    for (int i = 0; i < diamondParticles; i++) {
+      // Ângulo de cada partícula com velocidades diferentes
+      final double baseAngle = (i * 2 * pi / diamondParticles);
+      final double speed = 0.3 + 0.2 * sin(i * 0.7); // Velocidade variável
+      final double angle = (time * speed + baseAngle) % (2 * pi);
+
+      // Variação sutil no raio orbital
+      final double radiusVariation = orbitRadius +
+          (8 * sin(time * 1.1 + i * 0.5));
+
+      // Posição da partícula
+      final double particleX = centerX + radiusVariation * cos(angle);
+      final double particleY = centerY + radiusVariation * sin(angle);
+
+      // Tamanho da partícula AUMENTADO com animação sutil
+      final double particleSize = 2.5 + 1.5 *
+          sin(time * 2.5 + i * 0.8); // Aumentado de 1.5 + 0.8 para 2.5 + 1.5
+
+      // Opacidade variável para efeito de cintilação
+      final double particleOpacity = 0.6 + 0.4 * sin(time * 3.0 + i * 1.2);
+
+      // Desenhar partícula de diamante (formato ligeiramente angular)
+      final Path diamondParticlePath = Path();
+      final double halfSize = particleSize * 0.8; // Aumentado de 0.7 para 0.8
+
+      // Criar formato de diamante minúsculo
+      diamondParticlePath.moveTo(particleX, particleY - halfSize); // topo
+      diamondParticlePath.lineTo(
+          particleX + halfSize * 0.6, particleY); // direita
+      diamondParticlePath.lineTo(particleX, particleY + halfSize); // baixo
+      diamondParticlePath.lineTo(
+          particleX - halfSize * 0.6, particleY); // esquerda
+      diamondParticlePath.close();
+
+      // Cor da partícula de diamante (vermelho TRON com variação)
+      final Color particleColor = Color.lerp(
+          Color(0xFFFF0000), // Vermelho TRON
+          Color(0xFFFFAAA5), // Vermelho mais claro
+          0.3 + 0.4 * sin(time * 1.8 + i * 0.6)
+      )!;
+
+      // Pintar partícula
+      final Paint diamondParticlePaint = Paint()
+        ..color = particleColor.withOpacity(particleOpacity * opacity)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawPath(diamondParticlePath, diamondParticlePaint);
+
+      // Brilho sutil ao redor da partícula AUMENTADO
+      final Paint particleGlowPaint = Paint()
+        ..color = Color(0xFFFF0000).withOpacity(0.2 * particleOpacity * opacity)
+        ..maskFilter = const MaskFilter.blur(
+            BlurStyle.normal, 3.0); // Aumentado de 2.0 para 3.0
+
+      canvas.drawCircle(
+          Offset(particleX, particleY), particleSize * 1.5,
+          particleGlowPaint); // Aumentado de 1.2 para 1.5
+    }
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final double availableWidth = size.width;
@@ -2551,8 +3514,11 @@ class BubblesPainter extends CustomPainter {
               (b) => b.id == bubblesFiltered.first.id,
           orElse: () => bubblesFiltered.first
       );
-      bolhasParaDesenhar.addAll(bubbles.where((b) => b.id != searchedBubbleInstance!.id));
-      bolhasParaDesenhar.add(searchedBubbleInstance!);
+      final searchedId = searchedBubbleInstance?.id;
+      if (searchedId != null) {
+        bolhasParaDesenhar.addAll(bubbles.where((b) => b.id != searchedId));
+        bolhasParaDesenhar.add(searchedBubbleInstance!);
+      }
     } else {
       bolhasParaDesenhar.addAll(bubbles);
     }
@@ -2561,12 +3527,13 @@ class BubblesPainter extends CustomPainter {
       final bool isSpecial = bubble.id == 'game_bubble' ||
           bubble.id == 'terlinet_word' ||
           bubble.id == 'bitcoin_bubble' ||
-          bubble.id == 'canais_bubble';
+          bubble.id == 'canais_bubble' ||
+          bubble.id == 'tron_bubble';
       double baseSize = isSpecial ? 60.0 : bubble.size;
 
       bool isThisTheSearchedBubble = isSearching &&
           searchedBubbleInstance != null &&
-          bubble.id == searchedBubbleInstance!.id;
+          bubble.id == searchedBubbleInstance?.id;
 
       double drawSize = isSpecial ? baseSize * 1.18 : baseSize * 0.65;
       if (isThisTheSearchedBubble && !isSpecial) drawSize = baseSize * 1.55;
@@ -2595,6 +3562,18 @@ class BubblesPainter extends CustomPainter {
 
       if (isNubankBubble && opacity > 0.3) {
         _drawNubankSpecialEffect(canvas, bubble, left, top, drawSize, opacity);
+      }
+
+      // TRON bubbles: draw TRON special effects
+      final bool isTronBubble = bubble.id == 'tron_bubble' ||
+          (bubble.isSocial && bubble.name.toLowerCase().contains('tron')) ||
+          (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
+              bubble.id != 'canais_bubble' &&
+              bubble.id != 'bitcoin_bubble' &&
+              bubble.name.toLowerCase().contains('tron'));
+
+      if (isTronBubble && opacity > 0.3) {
+        _drawTronSpecialEffect(canvas, bubble, left, top, drawSize, opacity);
       }
 
       // Draw blockchain cube animations for crypto-related bubbles
@@ -2673,6 +3652,41 @@ class BubblesPainter extends CustomPainter {
                 ..strokeWidth = 2.2,
             );
           }
+        } else if (bubble.id == 'tron_bubble') {
+          // TRON bubble: usar GIF em vez de efeitos complexos, manter apenas animação dos pontos do diamante
+          // O GIF será desenhado no lugar do círculo padrão, e os efeitos especiais serão aplicados ao redor
+
+          // DRAW GIF (tron.gif) as bubble background
+          final avatarImage = bubbleImages[bubble.id];
+          if (avatarImage != null) {
+            final dst = Rect.fromCenter(
+              center: Offset(left + drawSize / 2, top + drawSize / 2),
+              width: drawSize,
+              height: drawSize,
+            );
+            canvas.saveLayer(dst.inflate(1.0), Paint()
+              ..color = Colors.white.withAlpha((255 * opacity).toInt()));
+            canvas.clipPath(Path()
+              ..addOval(dst));
+            canvas.drawImageRect(
+              avatarImage,
+              Rect.fromLTWH(0, 0, avatarImage.width.toDouble(),
+                  avatarImage.height.toDouble()),
+              dst,
+              Paint()
+                ..color = Colors.white.withAlpha((255 * opacity).toInt()),
+            );
+            canvas.restore();
+          } else {
+            // fallback circle
+            final paint = Paint()
+              ..color = bubble.color.withOpacity(opacity)
+              ..style = PaintingStyle.fill;
+            canvas.drawCircle(
+                Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
+                paint);
+          }
+          // A animação dos pontos do diamante já é feita por _drawTronSpecialEffect
         } else {
           final Rect gameRect = Rect.fromCircle(
               center: Offset(left + drawSize / 2, top + drawSize / 2),
@@ -2687,9 +3701,9 @@ class BubblesPainter extends CustomPainter {
             ).createShader(gameRect)
             ..style = PaintingStyle.stroke
             ..strokeWidth = drawSize * 0.08;
-          // Desenha o anel apenas se NÃO for a bolha terlinet_word, bitcoin_bubble, canais_bubble
+          // Desenha o anel apenas se NÃO for a bolha terlinet_word, bitcoin_bubble, canais_bubble, tron_bubble
           if (bubble.id != 'terlinet_word' && bubble.id != 'bitcoin_bubble' &&
-              bubble.id != 'canais_bubble') {
+              bubble.id != 'canais_bubble' && bubble.id != 'tron_bubble') {
             canvas.drawCircle(
                 Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
                 gradPaint);
@@ -2699,17 +3713,22 @@ class BubblesPainter extends CustomPainter {
             ..color = Colors.cyanAccent.withOpacity(
                 (0.35 + 0.25 * (0.5 + 0.5 * sin(anim * 6.283))) * opacity)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-          canvas.drawCircle(
-              Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 7,
-              glowPaint);
+          if (bubble.id != 'tron_bubble') {
+            canvas.drawCircle(
+                Offset(left + drawSize / 2, top + drawSize / 2),
+                drawSize / 2 + 7,
+                glowPaint);
+          }
 
           final double hexRadius = drawSize * 0.24;
           for (int i = 0; i < 6; i++) {
             final double angle = 6.283 * i / 6;
             final double x = left + drawSize / 2 + hexRadius * cos(angle);
             final double y = top + drawSize / 2 + hexRadius * sin(angle);
-            canvas.drawCircle(Offset(x, y), drawSize * 0.04, Paint()
-              ..color = Colors.white.withOpacity(0.15 * opacity));
+            if (bubble.id != 'tron_bubble') {
+              canvas.drawCircle(Offset(x, y), drawSize * 0.04, Paint()
+                ..color = Colors.white.withOpacity(0.15 * opacity));
+            }
           }
           for (int i = 0; i < 3; i++) {
             final double ang1 = 6.283 * i / 3;
@@ -2718,115 +3737,123 @@ class BubblesPainter extends CustomPainter {
             final double y1 = top + drawSize / 2 + hexRadius * sin(ang1);
             final double x2 = left + drawSize / 2 + hexRadius * cos(ang2);
             final double y2 = top + drawSize / 2 + hexRadius * sin(ang2);
-            canvas.drawLine(
-              Offset(x1, y1), Offset(x2, y2),
-              Paint()
-                ..color = Colors.cyanAccent.withOpacity(0.15 * opacity)
-                ..strokeWidth = 2.2,
-            );
+            if (bubble.id != 'tron_bubble') {
+              canvas.drawLine(
+                Offset(x1, y1), Offset(x2, y2),
+                Paint()
+                  ..color = Colors.cyanAccent.withOpacity(0.15 * opacity)
+                  ..strokeWidth = 2.2,
+              );
+            }
           }
         }
 
-        final String label = (bubble.id == 'game_bubble')
-            ? 'GAME'
-            : (bubble.id == 'bitcoin_bubble')
-            ? '₿'
-            : (bubble.id == 'canais_bubble')
-            ? 'CANAIS'
-            : 'TerlineT Word';
-        final double fontSize = (bubble.id == 'game_bubble')
-            ? drawSize * 0.31
-            : (bubble.id == 'bitcoin_bubble')
-            ? drawSize * 0.57
-            : (bubble.id == 'canais_bubble')
-            ? drawSize * 0.22
-            : drawSize * 0.27;
-        final double letterSpacing = (bubble.id == 'game_bubble')
-            ? 3.1
-            : 2.0;
-        final TextPainter textPainter = TextPainter(
-          text: TextSpan(
-            text: label,
-            style: TextStyle(
-              fontFamily: 'RobotoMono',
-              fontWeight: FontWeight.w900,
-              fontSize: fontSize,
-              color: Colors.white.withOpacity(opacity),
-              letterSpacing: letterSpacing,
-              shadows: bubble.id == 'canais_bubble' ? [
-                Shadow(
-                  blurRadius: 10,
-                  color: Colors.limeAccent.withOpacity(opacity),
-                ),
-                Shadow(
-                  blurRadius: 20,
-                  color: Colors.greenAccent.withOpacity(opacity),
-                ),
-              ] : [
-                Shadow(
-                  blurRadius: 10,
-                  color: Colors.cyanAccent.withOpacity(opacity),
-                ),
-                Shadow(
-                  blurRadius: 20,
-                  color: Colors.blueAccent.withOpacity(opacity),
-                ),
-              ],
+        if (bubble.id == 'game_bubble' ||
+            bubble.id == 'bitcoin_bubble' ||
+            bubble.id == 'canais_bubble' ||
+            bubble.id == 'terlinet_word') {
+          final String label = (bubble.id == 'game_bubble')
+              ? 'GAME'
+              : (bubble.id == 'bitcoin_bubble')
+              ? '₿'
+              : (bubble.id == 'canais_bubble')
+              ? 'CANAIS'
+              : 'TerlineT Word';
+          final double fontSize = (bubble.id == 'game_bubble')
+              ? drawSize * 0.31
+              : (bubble.id == 'bitcoin_bubble')
+              ? drawSize * 0.57
+              : (bubble.id == 'canais_bubble')
+              ? drawSize * 0.22
+              : drawSize * 0.27;
+          final double letterSpacing = (bubble.id == 'game_bubble')
+              ? 3.1
+              : 2.0;
+          final TextPainter textPainter = TextPainter(
+            text: TextSpan(
+              text: label,
+              style: TextStyle(
+                fontFamily: 'RobotoMono',
+                fontWeight: FontWeight.w900,
+                fontSize: fontSize,
+                color: Colors.white.withOpacity(opacity),
+                letterSpacing: letterSpacing,
+                shadows: bubble.id == 'canais_bubble' ? [
+                  Shadow(
+                    blurRadius: 10,
+                    color: Colors.limeAccent.withOpacity(opacity),
+                  ),
+                  Shadow(
+                    blurRadius: 20,
+                    color: Colors.greenAccent.withOpacity(opacity),
+                  ),
+                ] : [
+                  Shadow(
+                    blurRadius: 10,
+                    color: Colors.cyanAccent.withOpacity(opacity),
+                  ),
+                  Shadow(
+                    blurRadius: 20,
+                    color: Colors.blueAccent.withOpacity(opacity),
+                  ),
+                ],
+              ),
             ),
-          ),
-          textDirection: TextDirection.ltr,
-        );
-        textPainter.layout(minWidth: 0, maxWidth: double.infinity);
-        final double tx = left + (drawSize - textPainter.width) / 2;
-        final double ty = top + (drawSize - textPainter.height) / 2;
-        textPainter.paint(canvas, Offset(tx, ty));
-        if (bubble.id == 'terlinet_word') {
-          final int np = 36; // mais partículas para maior densidade
-          final double cx = left + drawSize / 2;
-          final double cy = top + drawSize / 2;
-          for (int i = 0; i < np; i++) {
-            // Semente determinística por partícula para parecer aleatório
-            final double seed = (i * 37.0 + 13.0);
-            // Velocidade reduzida e direção aleatória por partícula
-            final double dir = sin(seed * 0.53) > 0 ? 1.0 : -1.0;
-            final double speed = (0.15 + 0.35 * (0.5 + 0.5 * sin(seed * 1.1))) *
-                dir;
-            // Ângulo com velocidade variável e fase distinta
-            final double a = sweep * speed + seed * 0.23;
-            // Raio base com variação maior + jitter radial
-            final double baseOrbit = drawSize *
-                (0.46 + 0.12 * (0.5 + 0.5 * sin(seed * 1.7)));
-            final double jitterR = drawSize * 0.035 * sin(sweep * 2.4 + seed);
-            final double orbit = baseOrbit + jitterR;
-            // Wobble elíptico pequeno (direções diferentes para x/y)
-            final double wobble = drawSize * 0.05 *
-                (0.5 + 0.5 * cos(seed * 0.9));
-            final double px = cx + orbit * cos(a) +
-                wobble * cos(a * 0.6 + seed);
-            final double py = cy + orbit * sin(a) +
-                wobble * sin(a * 0.7 + seed * 1.3);
-            // Tamanho e halo
-            final double r = max(1.5,
-                drawSize * (0.013 + 0.006 * (0.5 + 0.5 * sin(seed * 2.3))));
-            // Variação sutil de cor ciano/azulada
-            final double colorMix = 0.5 + 0.5 * sin(seed * 0.7 + sweep * 0.3);
-            final Color dotColor = Color.lerp(
-                Colors.cyanAccent, Colors.lightBlueAccent, colorMix)!
-                .withOpacity(
-                (0.72 + 0.28 * (0.5 + 0.5 * sin(seed * 1.7))) * opacity);
-            final Color haloColor = Color.lerp(
-                Colors.cyanAccent, Colors.blueAccent,
-                0.3 + 0.7 * (0.5 + 0.5 * sin(seed * 0.5)))!
-                .withOpacity(0.24 * opacity);
+            textDirection: TextDirection.ltr,
+          );
+          textPainter.layout(minWidth: 0, maxWidth: double.infinity);
+          final double tx = left + (drawSize - textPainter.width) / 2;
+          final double ty = top + (drawSize - textPainter.height) / 2;
+          textPainter.paint(canvas, Offset(tx, ty));
+          if (bubble.id == 'terlinet_word') {
+            final int np = 36; // mais partículas para maior densidade
+            final double cx = left + drawSize / 2;
+            final double cy = top + drawSize / 2;
+            for (int i = 0; i < np; i++) {
+              // Semente determinística por partícula para parecer aleatório
+              final double seed = (i * 37.0 + 13.0);
+              // Velocidade reduzida e direção aleatória por partícula
+              final double dir = sin(seed * 0.53) > 0 ? 1.0 : -1.0;
+              final double speed = (0.15 +
+                  0.35 * (0.5 + 0.5 * sin(seed * 1.1))) *
+                  dir;
+              // Ângulo com velocidade variável e fase distinta
+              final double a = sweep * speed + seed * 0.23;
+              // Raio base com variação maior + jitter radial
+              final double baseOrbit = drawSize *
+                  (0.46 + 0.12 * (0.5 + 0.5 * sin(seed * 1.7)));
+              final double jitterR = drawSize * 0.035 * sin(sweep * 2.4 + seed);
+              final double orbit = baseOrbit + jitterR;
+              // Wobble elíptico pequeno (direções diferentes para x/y)
+              final double wobble = drawSize * 0.05 *
+                  (0.5 + 0.5 * cos(seed * 0.9));
+              final double px = cx + orbit * cos(a) +
+                  wobble * cos(a * 0.6 + seed);
+              final double py = cy + orbit * sin(a) +
+                  wobble * sin(a * 0.7 + seed * 1.3);
+              // Tamanho e halo
+              final double r = max(1.5,
+                  drawSize * (0.013 + 0.006 * (0.5 + 0.5 * sin(seed * 2.3))));
+              // Variação sutil de cor ciano/azulada
+              final double colorMix = 0.5 + 0.5 * sin(seed * 0.7 + sweep * 0.3);
+              final Color dotColor = Color.lerp(
+                  Colors.cyanAccent, Colors.lightBlueAccent, colorMix)!
+                  .withOpacity(
+                  (0.72 + 0.28 * (0.5 + 0.5 * sin(seed * 1.7))) * opacity);
+              final Color haloColor = Color.lerp(
+                  Colors.cyanAccent, Colors.blueAccent,
+                  0.3 + 0.7 * (0.5 + 0.5 * sin(seed * 0.5)))!
+                  .withOpacity(0.24 * opacity);
 
-            final Paint haloPaint = Paint()
-              ..color = haloColor
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
-            final Paint dotPaint = Paint()
-              ..color = dotColor
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
-            canvas.drawCircle(Offset(px, py), r * 1.8, haloPaint);
-            canvas.drawCircle(Offset(px, py), r, dotPaint);
+              final Paint haloPaint = Paint()
+                ..color = haloColor
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+              final Paint dotPaint = Paint()
+                ..color = dotColor
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
+              canvas.drawCircle(Offset(px, py), r * 1.8, haloPaint);
+              canvas.drawCircle(Offset(px, py), r, dotPaint);
+            }
           }
         }
       } else {
@@ -2843,9 +3870,12 @@ class BubblesPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
 
       if (isThisTheSearchedBubble || !isSearching) {
-        canvas.drawCircle(
-            Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 9,
-            glowPaint);
+        // Tratamento especial para TRON (remove efeitos padrão)
+        if (bubble.id != 'tron_bubble') {
+          canvas.drawCircle(
+              Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2 + 9,
+              glowPaint);
+        }
       }
 
       if (bubble.hasNotification) {
@@ -2985,7 +4015,8 @@ class BubblesPainter extends CustomPainter {
       if (bubble.avatarUrl.isNotEmpty && bubble.id != 'game_bubble' &&
           bubble.id != 'terlinet_word' &&
           bubble.id != 'bitcoin_bubble' &&
-          bubble.id != 'canais_bubble') {
+          bubble.id != 'canais_bubble' &&
+          bubble.id != 'tron_bubble') {
         final avatarImage = bubbleImages[bubble.id];
         final imageOpacity = opacity;
 
@@ -3029,7 +4060,8 @@ class BubblesPainter extends CustomPainter {
           //     borderPaint);
         }
       } else if (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
-          bubble.id != 'bitcoin_bubble' && bubble.id != 'canais_bubble') {
+          bubble.id != 'bitcoin_bubble' && bubble.id != 'canais_bubble' &&
+          bubble.id != 'tron_bubble') {
         final textPainter = TextPainter(
           text: TextSpan(
             text: bubble.name.isNotEmpty ? bubble.name[0].toUpperCase() : '',
@@ -3050,7 +4082,8 @@ class BubblesPainter extends CustomPainter {
       if (isThisTheSearchedBubble && bubble.id != 'game_bubble' &&
           bubble.id != 'terlinet_word' &&
           bubble.id != 'bitcoin_bubble' &&
-          bubble.id != 'canais_bubble') {
+          bubble.id != 'canais_bubble' &&
+          bubble.id != 'tron_bubble') {
         final highlightPaint = Paint()
           ..color = Colors.redAccent.withOpacity(0.9 * opacity)
           ..style = PaintingStyle.stroke
