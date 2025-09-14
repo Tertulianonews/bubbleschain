@@ -2468,11 +2468,18 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
                     children: [
                       Text(
                         'Informe seu e-mail cadastrado para receber o link de redefinição de senha.',
-                        style: GoogleFonts.orbitron(fontSize: 13),
+                        style: GoogleFonts.orbitron(
+                          fontSize: 13,
+                          color: Color(0xFF8AC5EC),
+                        ),
                       ),
                       const SizedBox(height: 15),
                       TextField(
                         controller: emailCtrl,
+                        style: TextStyle(
+                          color: Colors
+                              .black87, // Cor escura para o texto digitado
+                        ),
                         decoration: InputDecoration(
                           labelText: "Email",
                           labelStyle: GoogleFonts.orbitron(
@@ -2529,7 +2536,7 @@ class _LoginRegisterFormWidgetState extends State<_LoginRegisterFormWidget>
                           resetLoading = true;
                           resetMsg = null;
                         });
-                        const String kResetRedirectUrl = 'https://tertulianonews.github.io/bubbleschain/reset-password';
+                        const String kResetRedirectUrl = 'bubbleschain://reset-password';
                         try {
                           await Supabase.instance.client.auth
                               .resetPasswordForEmail(

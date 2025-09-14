@@ -39,6 +39,45 @@ class _PepeChatAppRootState extends State<_PepeChatAppRoot> {
   StreamSubscription? _linkSub;
   AppLinks? _appLinks;
 
+  // Process reset password deep link and route to reset screen, passing token if possible
+  void _processResetPasswordUri(Uri uri) {
+    print('[DEBUG DeepLink] Processando URI: ${uri.toString()}');
+
+    if (mounted) {
+      final token = uri.queryParameters['token'] ??
+          uri.queryParameters['access_token'] ??
+          uri.queryParameters['code'];
+      final type = uri.queryParameters['type'];
+
+      print(
+          '[DEBUG DeepLink] Token extraído: ${token != null ? 'PRESENTE (${token
+              .length} chars)' : 'AUSENTE'}');
+      print('[DEBUG DeepLink] Type extraído: $type');
+
+      if (token != null && token.isNotEmpty) {
+        print('[DEBUG DeepLink] Navegando para ResetPasswordScreen com token');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                ResetPasswordScreen(
+                  initialResetToken: token,
+                ),
+          ),
+        );
+      } else {
+        print('[DEBUG DeepLink] Token ausente ou vazio');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+            const ResetPasswordScreen(
+              initialResetToken: null,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -46,18 +85,11 @@ class _PepeChatAppRootState extends State<_PepeChatAppRoot> {
       _appLinks = AppLinks();
       _linkSub = _appLinks!.uriLinkStream.listen((Uri? uri) {
         if (uri != null && uri.path.contains('reset-password')) {
-          final accessToken =
-              uri.queryParameters['access_token'] ??
-              uri.queryParameters['code'];
-          if (accessToken != null && mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ResetPasswordScreen(),
-              ),
-            );
-          }
+          _processResetPasswordUri(uri);
         }
       }, onError: (_) {});
+      // TODO: Handle cold start deep link - check app_links documentation for correct method
+      // For now, only handling links while app is running
     }
   }
 
@@ -70,16 +102,64 @@ class _PepeChatAppRootState extends State<_PepeChatAppRoot> {
 
   Route<dynamic>? _handleWebRoute(RouteSettings settings) {
     // Priorizar /reset-password acima de tudo
-    if (settings.name != null && settings.name!.startsWith('/reset-password')) {
-      final uri = Uri.parse(settings.name!);
-      // Suporte tanto para code= quanto access_token=
-      final token =
-          uri.queryParameters['code'] ??
-          uri.queryParameters['access_token'] ??
-          '';
-      // Sempre abrir a tela, mesmo que token esteja vazio (para debugging)
+    if (settings.name != null &&
+        (settings.name!.contains('reset-password') ||
+            settings.name!.contains('auth_confirm=success'))) {
+      print('[DEBUG] Reset password route detected: ${settings.name}');
+
+      // Tentar extrair parâmetros da URL
+      try {
+        final uri = Uri.parse(settings.name!);
+        final token = uri.queryParameters['token'] ??
+            uri.queryParameters['access_token'] ??
+            uri.queryParameters['code'] ?? '';
+        final type = uri.queryParameters['type'] ?? '';
+        final authConfirm = uri.queryParameters['auth_confirm'] ?? '';
+
+        print('[DEBUG] Extracted from URL - Token: ${token.isNotEmpty
+            ? 'PRESENT'
+            : 'EMPTY'}, Type: $type, AuthConfirm: $authConfirm');
+
+        // Se não encontrou parâmetros na URL da rota, tentar pegar da URL atual da página
+        if (token.isEmpty && authConfirm.isEmpty) {
+          final currentUri = Uri.base;
+          final currentToken = currentUri.queryParameters['token'] ??
+              currentUri.queryParameters['access_token'] ??
+              currentUri.queryParameters['code'] ?? '';
+          final currentType = currentUri.queryParameters['type'] ?? '';
+          final currentAuthConfirm = currentUri
+              .queryParameters['auth_confirm'] ?? '';
+          print('[DEBUG] Extracted from current URL - Token: ${currentToken
+              .isNotEmpty
+              ? 'PRESENT'
+              : 'EMPTY'}, Type: $currentType, AuthConfirm: $currentAuthConfirm');
+        }
+      } catch (e) {
+        print('[DEBUG] Error parsing reset URL: $e');
+      }
+
+      // Sempre abrir a tela de reset, ela vai lidar com a validação dos tokens internamente
+      // Extraia parâmetros do URI para poder repassar à tela
+      String? resetToken;
+      try {
+        final uri = Uri.parse(settings.name!);
+        resetToken = uri.queryParameters['token'] ??
+            uri.queryParameters['access_token'] ??
+            uri.queryParameters['code'];
+        // Se não encontrou, tentar pegar da URL base da página
+        if (resetToken == null || resetToken.isEmpty) {
+          final currentUri = Uri.base;
+          resetToken = currentUri.queryParameters['token'] ??
+              currentUri.queryParameters['access_token'] ??
+              currentUri.queryParameters['code'];
+        }
+      } catch (_) {}
       return MaterialPageRoute(
-        builder: (_) => const ResetPasswordScreen(),
+        builder: (_) =>
+            ResetPasswordScreen(
+              initialResetToken: resetToken,
+            ),
+        settings: settings,
       );
     }
     // Depois cair para as rotas normais
@@ -104,6 +184,17 @@ class _PepeChatAppRootState extends State<_PepeChatAppRoot> {
         '/': (_) => const BubblesHomeScreen(),
         '/bubbles': (_) => const BubblesHomeScreen(),
         '/splash': (_) => const SplashScreen(),
+        // For direct navigation, allow passing token (web and app)
+        '/reset-password': (context) {
+          final uri = Uri.base;
+          final token =
+              uri.queryParameters['token'] ??
+                  uri.queryParameters['access_token'] ??
+                  uri.queryParameters['code'];
+          return ResetPasswordScreen(
+            initialResetToken: token,
+          );
+        },
       },
       onGenerateRoute: (kIsWeb ? _handleWebRoute : null),
     );

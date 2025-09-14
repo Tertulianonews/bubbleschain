@@ -202,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           _resetLoading = true;
                           resetMsg = null;
                         });
-                        const String kResetRedirectUrl = 'https://tertulianonews.github.io/bubbleschain/reset-password';
+                        const String kResetRedirectUrl = 'bubbleschain://reset-password';
                         try {
                           print('RESET TO: $kResetRedirectUrl');
                           await Supabase.instance.client.auth

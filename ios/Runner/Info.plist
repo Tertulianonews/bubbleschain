@@ -57,5 +57,16 @@
 	<string>Para anexar documentos às conversas.</string>
 	<key>UISupportsDocumentBrowser</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>bubbleschain.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bubbleschain</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
