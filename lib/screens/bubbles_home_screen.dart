@@ -18,6 +18,7 @@ import '../widgets/live_video_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'terms_privacy_screen.dart';
 import '../widgets/pepe_logo.dart';
+import '../services/supabase_service.dart'; // Adicionando o import do SupabaseService
 
 // Modelo para notificação
 class NotificationItem {
@@ -857,6 +858,11 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
   int notificationsCount = 0;
   bool isLoadingNotifications = false;
 
+  // BubblesCoins - Adicionando variáveis para o saldo
+  final SupabaseService _supabaseService = SupabaseService();
+  double bubblesCoinsBalance = 0.0;
+  bool isLoadingBalance = false;
+
   bool get isLoggedIn {
     final user = Supabase.instance.client.auth.currentUser;
     return user != null;
@@ -905,6 +911,41 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     } catch (e) {
       print("[DEBUG] Erro em _buscarNotificantes: $e");
       return {};
+    }
+  }
+
+  // BubblesCoins - Método para carregar o saldo do usuário
+  Future<void> _loadBubblesCoinsBalance() async {
+    print(
+        "[DEBUG] _loadBubblesCoinsBalance iniciado para userId: $currentUserId");
+
+    if (currentUserId.isEmpty) {
+      print("[DEBUG] currentUserId vazio, setando saldo para 0.0");
+      if (mounted) setState(() => bubblesCoinsBalance = 0.0);
+      return;
+    }
+
+    if (mounted) setState(() => isLoadingBalance = true);
+
+    try {
+      final balance = await _supabaseService.getBubbleCoinBalance(
+          currentUserId);
+      print("[DEBUG] Saldo carregado: $balance BubblesCoins");
+
+      if (mounted) {
+        setState(() {
+          bubblesCoinsBalance = balance;
+          isLoadingBalance = false;
+        });
+      }
+    } catch (e) {
+      print("[DEBUG] Erro ao carregar saldo BubblesCoins: $e");
+      if (mounted) {
+        setState(() {
+          bubblesCoinsBalance = 0.0;
+          isLoadingBalance = false;
+        });
+      }
     }
   }
 
@@ -961,7 +1002,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
       double drawSize = b.size * 0.65;
       if (b.id == 'game_bubble' || b.id == 'terlinet_word' ||
-          b.id == 'bitcoin_bubble' || b.id == 'canais_bubble')
+          b.id == 'bitcoin_bubble' || b.id == 'canais_bubble' ||
+          b.id == 'toncoin_bubble')
         drawSize = b.size * 1.18;
       else if (isSearching && bubblesFiltered.isNotEmpty && bubblesFiltered.first.id == b.id) {
         drawSize = b.size * 1.55;
@@ -980,13 +1022,15 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
         double bDrawSize = b.size * 0.65;
         if (b.id == 'game_bubble' || b.id == 'terlinet_word' ||
-            b.id == 'bitcoin_bubble' || b.id == 'canais_bubble')
+            b.id == 'bitcoin_bubble' || b.id == 'canais_bubble' ||
+            b.id == 'toncoin_bubble')
           bDrawSize = b.size * 1.18;
         else if (isSearching && bubblesFiltered.isNotEmpty && bubblesFiltered.first.id == b.id) bDrawSize = b.size * 1.55;
 
         double oDrawSize = o.size * 0.65;
         if (o.id == 'game_bubble' || o.id == 'terlinet_word' ||
-            o.id == 'bitcoin_bubble' || o.id == 'canais_bubble')
+            o.id == 'bitcoin_bubble' || o.id == 'canais_bubble' ||
+            o.id == 'toncoin_bubble')
           oDrawSize = o.size * 1.18;
         else if (isSearching && bubblesFiltered.isNotEmpty && bubblesFiltered.first.id == o.id) oDrawSize = o.size * 1.55;
 
@@ -1184,6 +1228,24 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           );
           // Carregar imagem do GIF TRON
           _loadAvatarImage(bubbles.last);
+
+          // Adiciona a bolha TONCOIN (nova bolha social épica com diamantes)
+          bubbles.add(
+            UserBubble(
+              id: 'toncoin_bubble',
+              name: 'TON',
+              avatarUrl: '',
+              x: 0.81,
+              y: 0.85,
+              dx: 0,
+              dy: 0,
+              size: 60,
+              color: Color(0xFF0098EA),
+              // Azul oficial TON
+              isSocial: true,
+            ),
+          );
+
           print("[DEBUG] Bolhas carregadas. Total: ${bubbles.length}");
         });
       }
@@ -1284,6 +1346,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           _carregarMeuPerfil();
           _loadAllUsersBubbles();
           _loadNotificationBadgeCount();
+          _loadBubblesCoinsBalance(); // Carregar saldo ao fazer login
         }
       } else if (event == AuthChangeEvent.signedOut) {
         if (mounted) {
@@ -1293,6 +1356,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
             currentUserAvatar = '';
             profileLoaded = false;
             notificationsCount = 0;
+            bubblesCoinsBalance = 0.0; // Resetar saldo ao fazer logout
             print("[DEBUG] User signed out");
           });
         }
@@ -1301,6 +1365,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
     if (currentUserId.isNotEmpty) {
       _carregarMeuPerfil();
+      _loadBubblesCoinsBalance(); // Carregar saldo inicial se já logado
     }
     bubbles = [];
     controller = AnimationController(vsync: this, duration: const Duration(days: 9999))
@@ -1333,6 +1398,15 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       if (mounted) {
         _loadNotificationBadgeCount();
       } else {
+        timer.cancel();
+      }
+    });
+
+    // Timer para atualizar saldo de BubblesCoins a cada 45 segundos
+    Timer.periodic(const Duration(seconds: 45), (timer) {
+      if (mounted && currentUserId.isNotEmpty) {
+        _loadBubblesCoinsBalance();
+      } else if (!mounted) {
         timer.cancel();
       }
     });
@@ -1401,6 +1475,12 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
       return;
     }
 
+    // Verificação e ação para TONCOIN
+    if (user.id == 'toncoin_bubble') {
+      await launchUrl(Uri.parse('https://ton.org/'));
+      return;
+    }
+
     try {
       final social = await Supabase.instance.client
           .from('socialBubbles')
@@ -1419,10 +1499,12 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     // ATUALIZAÇÃO: Verificação para TerlineT Word
     if (user.id == 'terlinet_word') {
       if (!mounted) return;
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const TerlineTWordScreen()),
       );
+      // Recarregar saldo após voltar do TerlineT Word (usuário pode ter ganhado moedas)
+      _loadBubblesCoinsBalance();
       return;
     }
 
@@ -1454,9 +1536,10 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
         ),
       ),
     );
-    // Atualizar status de live e notificações após voltar do chat
+    // Atualizar status de live, notificações e saldo após voltar do chat
     _updateLiveStatus();
     _loadNotificationBadgeCount();
+    _loadBubblesCoinsBalance(); // Recarregar saldo após voltar do chat
   }
 
   void _onMyProfileTap() async {
@@ -1466,16 +1549,127 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
     await Navigator.push(context, MaterialPageRoute(
         builder: (_) => ProfileSetupScreen(userIdOverride: currentUserId)));
 
-    // Atualizar status de live e notificações após voltar do perfil (pode ter iniciado/parado live)
+    // Atualizar status de live, notificações e saldo após voltar do perfil
     _updateLiveStatus();
     _loadNotificationBadgeCount();
+    _loadBubblesCoinsBalance(); // Recarregar saldo após voltar do perfil
+  }
+
+  // BubblesCoins - Widget para exibir a carteira
+  Widget _buildWalletWidget() {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.amber.withOpacity(0.15),
+            Colors.orange.withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.amber.withOpacity(0.3),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Ícone da moeda
+          Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                colors: [
+                  Colors.amber.shade300,
+                  Colors.orange.shade400,
+                ],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.amber.withOpacity(0.4),
+                  blurRadius: 3,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                '🫧',
+                style: TextStyle(fontSize: 10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Saldo
+          if (isLoadingBalance)
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    Colors.amber.shade300),
+              ),
+            )
+          else
+            Text(
+              bubblesCoinsBalance.toStringAsFixed(8),
+              style: GoogleFonts.orbitron(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Colors.amber.shade200,
+                shadows: [
+                  Shadow(
+                    blurRadius: 2,
+                    color: Colors.black.withOpacity(0.3),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(width: 4),
+          // Label
+          Text(
+            'BC',
+            style: GoogleFonts.orbitron(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: Colors.amber.shade300,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   List<UserBubble> get bubblesFiltered {
     if (searchText.trim().isEmpty) return bubbles;
     final query = searchText.trim().toLowerCase();
+    final queryOriginal = searchText
+        .trim(); // Manter busca original para case-sensitive
     return bubbles.where((b) =>
-    b.name.toLowerCase().contains(query) || (b.name.isNotEmpty && b.name[0].toLowerCase() == query)
+    b.name.toLowerCase().contains(query) ||
+        (b.name.isNotEmpty && b.name[0].toLowerCase() == query) ||
+        // Busca especial para TONCOIN com case-sensitive
+        (b.id == 'toncoin_bubble' && (
+            queryOriginal == 'TON' ||
+                queryOriginal == 'TonCoin' ||
+                queryOriginal.toLowerCase() == 'ton' ||
+                queryOriginal.toLowerCase() == 'toncoin'
+        ))
     ).toList();
   }
 
@@ -1622,14 +1816,24 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(currentUserName.isNotEmpty
-                            ? currentUserName
-                            : "Carregando...",
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 17,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              currentUserName.isNotEmpty
+                                  ? currentUserName
+                                  : "Carregando...",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 17,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                            // Carteira de BubblesCoins
+                            _buildWalletWidget(),
+                          ],
+                        ),
                       ),
                       // Botão do sino de notificação com badge
                       Builder(
@@ -1885,7 +2089,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                   bubble.id == 'terlinet_word' ||
                                   bubble.id == 'bitcoin_bubble' ||
                                   bubble.id == 'canais_bubble' ||
-                                  bubble.id == 'tron_bubble';
+                                  bubble.id == 'tron_bubble' ||
+                                  bubble.id == 'toncoin_bubble';
                               double baseSize = isSpecial ? 60.0 : bubble.size;
 
                               bool isThisTheSearchedBubble = isSearching &&
@@ -1909,15 +2114,20 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                               if (dist <= raio) {
                                 print('[DEBUG] Bolha ${bubble.name} TOCADA!');
                                 if (bubble.id == 'game_bubble') {
-                                  Navigator.push(
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => const BubbleGameScreen(),
                                     ),
                                   );
+                                  // Recarregar saldo após voltar do jogo (usuário pode ter ganhado moedas)
+                                  _loadBubblesCoinsBalance();
                                 } else if (bubble.id == 'bitcoin_bubble') {
                                   await launchUrl(
                                       Uri.parse('https://bitcoin.org/'));
+                                } else if (bubble.id == 'toncoin_bubble') {
+                                  await launchUrl(
+                                      Uri.parse('https://ton.org/'));
                                 } else if (bubble.id == 'canais_bubble') {
                                   if (!mounted) return;
                                   Navigator.push(
@@ -3508,6 +3718,172 @@ class BubblesPainter extends CustomPainter {
     }
   }
 
+  // Especial: Efeitos de fragmentos de diamantes orbitando (usado para TONCOIN)
+  void _drawToncoinDiamondEffect(Canvas canvas, UserBubble bubble, double left,
+      double top, double drawSize, double opacity) {
+    if (opacity < 0.1) return;
+
+    final double time = DateTime
+        .now()
+        .millisecondsSinceEpoch / 1000.0;
+    final double centerX = left + drawSize / 2;
+    final double centerY = top + drawSize / 2;
+
+    // Cor azul do TONCOIN
+    final Color tonBlue = Color(0xFF0098EA);
+
+    // Efeito glow de energia azul
+    final Paint glowPaint = Paint()
+      ..color = tonBlue.withOpacity(0.21 * opacity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+    canvas.drawCircle(
+        Offset(centerX, centerY), drawSize / 2 + 14, glowPaint);
+
+    // Anel brilhante animado TONCOIN estilo - REMOVIDO
+    // final Paint ringPaint = Paint()
+    //   ..shader = SweepGradient(
+    //     colors: [
+    //       tonBlue.withOpacity(opacity),
+    //       Colors.white.withOpacity(0.8 * opacity),
+    //       tonBlue.withOpacity(opacity),
+    //       Colors.cyanAccent.withOpacity(0.6 * opacity),
+    //       tonBlue.withOpacity(opacity),
+    //     ],
+    //     startAngle: time * 0.7,
+    //     endAngle: time * 0.7 + 6.283,
+    //   ).createShader(Rect.fromCircle(
+    //       center: Offset(centerX, centerY), radius: drawSize / 2 + 12))
+    //   ..style = PaintingStyle.stroke
+    //   ..strokeWidth = 4.0;
+    // canvas.drawCircle(
+    //     Offset(centerX, centerY), drawSize / 2 + 12, ringPaint);
+
+    // Fragmentos de diamantes: partículas orbitando
+    final int diamonds = 18;
+    for (int i = 0; i < diamonds; i++) {
+      final double baseAngle = (i * 2 * pi / diamonds);
+      final double speed = 0.25 + 0.2 * sin(i * 0.7);
+      final double angle = (time * speed + baseAngle) % (2 * pi);
+
+      // Raio orbital variável
+      final double baseOrbit = drawSize * (0.62 + 0.10 * sin(i + time));
+      final double orbit = baseOrbit + 10 * sin(i * 0.8 + time * 1.4);
+
+      // Posição do diamante
+      final double diamondX = centerX + orbit * cos(angle);
+      final double diamondY = centerY + orbit * sin(angle);
+
+      final double diamondSize = 4.2 + 2.0 * sin(time * 2.1 + i * 0.64);
+
+      // Cor azul clara, misturada sutilmente com branco para efeito de brilho
+      final Color diamondColor = Color.lerp(
+          tonBlue,
+          Colors.white,
+          0.40 + 0.54 * (0.5 + 0.5 * sin(time * 1.7 + i * 0.6))
+      )!.withOpacity(
+          (0.60 + 0.35 * (0.5 + 0.5 * sin(time * 2.8 + i * 1.2))) * opacity);
+
+      // Desenha diamante (forma quad angular + base triangular)
+      Path diamondPath = Path();
+      double h = diamondSize;
+      double w = diamondSize * 0.72;
+
+      // Topo
+      diamondPath.moveTo(diamondX, diamondY - h / 2);
+      // Lado direito
+      diamondPath.lineTo(diamondX + w / 2, diamondY);
+      // Base (faz um triângulo)
+      diamondPath.lineTo(diamondX, diamondY + h / 2);
+      // Lado esquerdo
+      diamondPath.lineTo(diamondX - w / 2, diamondY);
+      diamondPath.close();
+
+      // Cor do diamante
+      final Paint diamondPaint = Paint()
+        ..color = diamondColor
+        ..style = PaintingStyle.fill;
+
+      canvas.drawPath(diamondPath, diamondPaint);
+
+      // Brilho sutil azulado
+      final Paint diamondGlow = Paint()
+        ..color = tonBlue.withOpacity(0.24 * opacity)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+      canvas.drawCircle(
+          Offset(diamondX, diamondY), diamondSize * 1.25, diamondGlow);
+    }
+
+    // Desenho do símbolo do TON (Toncoin): diamante no centro
+    final double mainDiamondSize = drawSize * 0.32;
+    final double cx = centerX;
+    final double cy = centerY;
+    Path mainDiamond = Path();
+    mainDiamond.moveTo(cx, cy - mainDiamondSize / 2);
+    mainDiamond.lineTo(cx + mainDiamondSize / 2, cy);
+    mainDiamond.lineTo(cx, cy + mainDiamondSize / 2);
+    mainDiamond.lineTo(cx - mainDiamondSize / 2, cy);
+    mainDiamond.close();
+    final Paint diamondMainPaint = Paint()
+      ..color = Colors.white.withOpacity(0.95 * opacity)
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.9);
+    canvas.drawPath(mainDiamond, diamondMainPaint);
+
+    // Contorno azul
+    final Paint diamondOutline = Paint()
+      ..color = tonBlue.withOpacity(0.87 * opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    canvas.drawPath(mainDiamond, diamondOutline);
+
+    // Reflexo de brilho central
+    final Paint highlight = Paint()
+      ..color = Colors.white.withOpacity(0.55 * opacity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.7);
+
+    final highlightPath = Path();
+    highlightPath.moveTo(cx, cy - mainDiamondSize * 0.37);
+    highlightPath.lineTo(cx + mainDiamondSize * 0.17, cy);
+    highlightPath.lineTo(cx, cy + mainDiamondSize * 0.13);
+    highlightPath.lineTo(cx - mainDiamondSize * 0.17, cy);
+    highlightPath.close();
+    canvas.drawPath(highlightPath, highlight);
+
+    // Pequenas estrelas ao redor da bolha em posições aleatórias
+    final int starCount = 7;
+    for (int i = 0; i < starCount; i++) {
+      final double ang = (i * 2 * pi / starCount) + sin(time + i);
+      final double r = drawSize * (0.35 + 0.22 * sin(i * 0.81 + time));
+      final double starX = centerX + r * cos(ang);
+      final double starY = centerY + r * sin(ang);
+      final double s = 1.1 + 1.2 * (0.5 + 0.5 * sin(time * 2.7 + i));
+      _drawStar(
+          canvas, Offset(starX, starY), s, tonBlue.withOpacity(0.73 * opacity));
+    }
+  }
+
+  void _drawStar(Canvas canvas, Offset c, double r, Color color) {
+    final int numPoints = 5;
+    final double innerR = r * 0.45;
+    final Path star = Path();
+    for (int i = 0; i < numPoints * 2; i++) {
+      final double angle = (pi / numPoints) * i;
+      final double radius = (i % 2 == 0) ? r : innerR;
+      final double x = c.dx + radius * cos(angle - pi / 2);
+      final double y = c.dy + radius * sin(angle - pi / 2);
+      if (i == 0) {
+        star.moveTo(x, y);
+      } else {
+        star.lineTo(x, y);
+      }
+    }
+    star.close();
+    final Paint paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(star, paint);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final double availableWidth = size.width;
@@ -3535,7 +3911,8 @@ class BubblesPainter extends CustomPainter {
           bubble.id == 'terlinet_word' ||
           bubble.id == 'bitcoin_bubble' ||
           bubble.id == 'canais_bubble' ||
-          bubble.id == 'tron_bubble';
+          bubble.id == 'tron_bubble' ||
+          bubble.id == 'toncoin_bubble';
       double baseSize = isSpecial ? 60.0 : bubble.size;
 
       bool isThisTheSearchedBubble = isSearching &&
@@ -3569,6 +3946,23 @@ class BubblesPainter extends CustomPainter {
 
       if (isNubankBubble && opacity > 0.3) {
         _drawNubankSpecialEffect(canvas, bubble, left, top, drawSize, opacity);
+      }
+
+      // TONCOIN bubbles: draw TONCOIN epic diamond effect
+      // Now matches 'TON' or 'TonCoin' case-sensitive search as well
+      final bool isToncoinBubble = bubble.id == 'toncoin_bubble' ||
+          (bubble.isSocial && (bubble.name.toLowerCase().contains('toncoin') ||
+              bubble.name == 'TonCoin' || bubble.name == 'TON')) ||
+          (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
+              bubble.id != 'canais_bubble' && bubble.id != 'bitcoin_bubble' &&
+              bubble.id != 'tron_bubble' &&
+              (bubble.name.toLowerCase().contains('toncoin') ||
+                  bubble.name == 'TonCoin' || bubble.name == 'TON')) ||
+          (bubble.id != 'game_bubble' &&
+              (bubble.name.toLowerCase() == 'ton' || bubble.name == 'TON'));
+
+      if (isToncoinBubble && opacity > 0.3) {
+        _drawToncoinDiamondEffect(canvas, bubble, left, top, drawSize, opacity);
       }
 
       // TRON bubbles: draw TRON special effects
@@ -3708,9 +4102,10 @@ class BubblesPainter extends CustomPainter {
             ).createShader(gameRect)
             ..style = PaintingStyle.stroke
             ..strokeWidth = drawSize * 0.08;
-          // Desenha o anel apenas se NÃO for a bolha terlinet_word, bitcoin_bubble, canais_bubble, tron_bubble
+          // Desenha o anel apenas se NÃO for a bolha terlinet_word, bitcoin_bubble, canais_bubble, tron_bubble, toncoin_bubble
           if (bubble.id != 'terlinet_word' && bubble.id != 'bitcoin_bubble' &&
-              bubble.id != 'canais_bubble' && bubble.id != 'tron_bubble') {
+              bubble.id != 'canais_bubble' && bubble.id != 'tron_bubble' &&
+              bubble.id != 'toncoin_bubble') {
             canvas.drawCircle(
                 Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
                 gradPaint);
@@ -3720,7 +4115,7 @@ class BubblesPainter extends CustomPainter {
             ..color = Colors.cyanAccent.withOpacity(
                 (0.35 + 0.25 * (0.5 + 0.5 * sin(anim * 6.283))) * opacity)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-          if (bubble.id != 'tron_bubble') {
+          if (bubble.id != 'tron_bubble' && bubble.id != 'toncoin_bubble') {
             canvas.drawCircle(
                 Offset(left + drawSize / 2, top + drawSize / 2),
                 drawSize / 2 + 7,
@@ -3732,7 +4127,7 @@ class BubblesPainter extends CustomPainter {
             final double angle = 6.283 * i / 6;
             final double x = left + drawSize / 2 + hexRadius * cos(angle);
             final double y = top + drawSize / 2 + hexRadius * sin(angle);
-            if (bubble.id != 'tron_bubble') {
+            if (bubble.id != 'tron_bubble' && bubble.id != 'toncoin_bubble') {
               canvas.drawCircle(Offset(x, y), drawSize * 0.04, Paint()
                 ..color = Colors.white.withOpacity(0.15 * opacity));
             }
@@ -3744,7 +4139,7 @@ class BubblesPainter extends CustomPainter {
             final double y1 = top + drawSize / 2 + hexRadius * sin(ang1);
             final double x2 = left + drawSize / 2 + hexRadius * cos(ang2);
             final double y2 = top + drawSize / 2 + hexRadius * sin(ang2);
-            if (bubble.id != 'tron_bubble') {
+            if (bubble.id != 'tron_bubble' && bubble.id != 'toncoin_bubble') {
               canvas.drawLine(
                 Offset(x1, y1), Offset(x2, y2),
                 Paint()
@@ -3758,13 +4153,16 @@ class BubblesPainter extends CustomPainter {
         if (bubble.id == 'game_bubble' ||
             bubble.id == 'bitcoin_bubble' ||
             bubble.id == 'canais_bubble' ||
-            bubble.id == 'terlinet_word') {
+            bubble.id == 'terlinet_word' ||
+            bubble.id == 'toncoin_bubble') {
           final String label = (bubble.id == 'game_bubble')
               ? 'GAME'
               : (bubble.id == 'bitcoin_bubble')
               ? '₿'
               : (bubble.id == 'canais_bubble')
               ? 'CANAIS'
+              : (bubble.id == 'toncoin_bubble')
+              ? '💎'
               : 'TerlineT Word';
           final double fontSize = (bubble.id == 'game_bubble')
               ? drawSize * 0.31
@@ -3772,6 +4170,8 @@ class BubblesPainter extends CustomPainter {
               ? drawSize * 0.57
               : (bubble.id == 'canais_bubble')
               ? drawSize * 0.22
+              : (bubble.id == 'toncoin_bubble')
+              ? drawSize * 0.41
               : drawSize * 0.27;
           final double letterSpacing = (bubble.id == 'game_bubble')
               ? 3.1
@@ -3793,6 +4193,15 @@ class BubblesPainter extends CustomPainter {
                   Shadow(
                     blurRadius: 20,
                     color: Colors.greenAccent.withOpacity(opacity),
+                  ),
+                ] : bubble.id == 'toncoin_bubble' ? [
+                  Shadow(
+                    blurRadius: 10,
+                    color: Color(0xFF0098EA).withOpacity(opacity),
+                  ),
+                  Shadow(
+                    blurRadius: 20,
+                    color: Colors.cyanAccent.withOpacity(opacity),
                   ),
                 ] : [
                   Shadow(
@@ -4023,7 +4432,8 @@ class BubblesPainter extends CustomPainter {
           bubble.id != 'terlinet_word' &&
           bubble.id != 'bitcoin_bubble' &&
           bubble.id != 'canais_bubble' &&
-          bubble.id != 'tron_bubble') {
+          bubble.id != 'tron_bubble' &&
+          bubble.id != 'toncoin_bubble') {
         final avatarImage = bubbleImages[bubble.id];
         final imageOpacity = opacity;
 
@@ -4068,7 +4478,7 @@ class BubblesPainter extends CustomPainter {
         }
       } else if (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
           bubble.id != 'bitcoin_bubble' && bubble.id != 'canais_bubble' &&
-          bubble.id != 'tron_bubble') {
+          bubble.id != 'tron_bubble' && bubble.id != 'toncoin_bubble') {
         final textPainter = TextPainter(
           text: TextSpan(
             text: bubble.name.isNotEmpty ? bubble.name[0].toUpperCase() : '',
@@ -4090,7 +4500,8 @@ class BubblesPainter extends CustomPainter {
           bubble.id != 'terlinet_word' &&
           bubble.id != 'bitcoin_bubble' &&
           bubble.id != 'canais_bubble' &&
-          bubble.id != 'tron_bubble') {
+          bubble.id != 'tron_bubble' &&
+          bubble.id != 'toncoin_bubble') {
         final highlightPaint = Paint()
           ..color = Colors.redAccent.withOpacity(0.9 * opacity)
           ..style = PaintingStyle.stroke
