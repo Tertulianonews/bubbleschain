@@ -206,32 +206,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Background
+            // Background com águas-vivas animadas
             Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.blueGrey.shade900,
-                      Colors.black87,
-                      Colors.black,
-                    ],
-                  ),
-                ),
-                child: Image.asset(
-                  'assets/gifmaster.gif',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    print(
-                        "[DEBUG NotificationsScreen] Erro ao carregar background: $error");
-                    return Container(
-                      color: Colors.blueGrey.shade900,
-                    );
-                  },
-                ),
-              ),
+              child: JellyfishBackground(),
             ),
 
             // Conteúdo principal
@@ -649,6 +626,795 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
     );
   }
+}
+
+// Widget para emojis de águas-vivas flutuando
+class JellyfishBackground extends StatefulWidget {
+  const JellyfishBackground({Key? key}) : super(key: key);
+
+  @override
+  State<JellyfishBackground> createState() => _JellyfishBackgroundState();
+}
+
+// Classe para dados de peixe
+class FishData {
+  final double y;
+  final double size;
+  final double opacity;
+  final double verticalFloat;
+  final int delay;
+  final String emoji;
+  final bool leftToRight;
+
+  FishData({
+    required this.y,
+    required this.size,
+    required this.opacity,
+    required this.verticalFloat,
+    required this.delay,
+    required this.emoji,
+    required this.leftToRight,
+  });
+}
+
+// Classe para cardume de peixes
+class SchoolOfFish {
+  final List<FishInSchool> fishes;
+  final double baseY;
+  final bool leftToRight;
+  final String emoji;
+  final double speed;
+  final int delay;
+
+  SchoolOfFish({
+    required this.fishes,
+    required this.baseY,
+    required this.leftToRight,
+    required this.emoji,
+    required this.speed,
+    required this.delay,
+  });
+}
+
+class FishInSchool {
+  final double offsetX;
+  final double offsetY;
+  final double size;
+  final double opacity;
+  final double phase;
+
+  FishInSchool({
+    required this.offsetX,
+    required this.offsetY,
+    required this.size,
+    required this.opacity,
+    required this.phase,
+  });
+}
+
+// Classe para bolhas oceânicas
+class OceanBubble {
+  final double x;
+  final double size;
+  final double opacity;
+  final double speed;
+  final int delay;
+  final double horizontalDrift;
+
+  OceanBubble({
+    required this.x,
+    required this.size,
+    required this.opacity,
+    required this.speed,
+    required this.delay,
+    required this.horizontalDrift,
+  });
+}
+
+class _JellyfishBackgroundState extends State<JellyfishBackground>
+    with TickerProviderStateMixin {
+  late List<AnimationController> _controllers;
+  late List<Animation<double>> _animations;
+  final List<JellyfishData> _jellyfishList = [];
+  final Random _random = Random();
+
+  // Controladores para peixes individuais
+  late List<AnimationController> _fishControllers;
+  late List<Animation<double>> _fishAnimations;
+  final List<FishData> _fishList = [];
+
+  // Controladores para cardumes de peixes
+  late List<AnimationController> _schoolControllers;
+  late List<Animation<double>> _schoolAnimations;
+  final List<SchoolOfFish> _schoolsList = [];
+
+  // Controladores para bolhas oceânicas
+  late List<AnimationController> _bubbleControllers;
+  late List<Animation<double>> _bubbleAnimations;
+  final List<OceanBubble> _oceanBubblesList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeJellyfish();
+    _initializeFish();
+    _initializeSchools();
+    _initializeOceanBubbles();
+  }
+
+  void _initializeJellyfish() {
+    const int jellyfishCount = 12; // Número de águas-vivas na tela
+    _controllers = [];
+    _animations = [];
+
+    for (int i = 0; i < jellyfishCount; i++) {
+      // Controlador de animação para cada água-viva
+      final controller = AnimationController(
+        duration: Duration(
+          milliseconds: 8000 + _random.nextInt(6000), // 8-14 segundos
+        ),
+        vsync: this,
+      );
+
+      // Animação de movimento vertical
+      final animation = Tween<double>(
+        begin: 1.2, // Começa abaixo da tela
+        end: -0.2, // Termina acima da tela
+      ).animate(CurvedAnimation(
+        parent: controller,
+        curve: Curves.linear,
+      ));
+
+      _controllers.add(controller);
+      _animations.add(animation);
+
+      // Dados da água-viva
+      final jellyfish = JellyfishData(
+        x: _random.nextDouble(),
+        // Posição X aleatória (0-1)
+        size: 0.8 + _random.nextDouble() * 0.4,
+        // Tamanho variável
+        opacity: 0.3 + _random.nextDouble() * 0.4,
+        // Opacidade variável
+        horizontalDrift: (_random.nextDouble() - 0.5) * 0.1,
+        // Deriva horizontal sutil
+        delay: _random.nextInt(8000), // Delay inicial aleatório
+      );
+
+      _jellyfishList.add(jellyfish);
+
+      // Iniciar animação com delay
+      Future.delayed(Duration(milliseconds: jellyfish.delay), () {
+        if (mounted) {
+          controller.repeat();
+        }
+      });
+    }
+  }
+
+  void _initializeFish() {
+    const int fishCount = 8; // Número de peixes na tela
+    _fishControllers = [];
+    _fishAnimations = [];
+
+    final List<String> fishEmojis = ['🐟', '🐠', '🐡', '🦈', '🐙'];
+
+    for (int i = 0; i < fishCount; i++) {
+      // Controlador de animação para cada peixe
+      final controller = AnimationController(
+        duration: Duration(
+          milliseconds: 6000 + _random.nextInt(8000), // 6-14 segundos
+        ),
+        vsync: this,
+      );
+
+      // Animação de movimento horizontal (da direita para esquerda ou vice-versa)
+      final bool leftToRight = _random.nextBool();
+      final animation = Tween<double>(
+        begin: leftToRight ? -0.1 : 1.1, // Começa fora da tela
+        end: leftToRight ? 1.1 : -0.1, // Termina do outro lado
+      ).animate(CurvedAnimation(
+        parent: controller,
+        curve: Curves.linear,
+      ));
+
+      _fishControllers.add(controller);
+      _fishAnimations.add(animation);
+
+      // Dados do peixe
+      final fish = FishData(
+        y: 0.3 + _random.nextDouble() * 0.5,
+        // Posição Y entre 30% e 80% da tela
+        size: 0.6 + _random.nextDouble() * 0.6,
+        // Tamanho variável
+        opacity: 0.4 + _random.nextDouble() * 0.4,
+        // Opacidade variável
+        verticalFloat: (_random.nextDouble() - 0.5) * 0.05,
+        // Flutuação vertical sutil
+        delay: _random.nextInt(10000),
+        // Delay inicial aleatório
+        emoji: fishEmojis[_random.nextInt(fishEmojis.length)],
+        // Emoji aleatório
+        leftToRight: leftToRight,
+      );
+
+      _fishList.add(fish);
+
+      // Iniciar animação com delay
+      Future.delayed(Duration(milliseconds: fish.delay), () {
+        if (mounted) {
+          controller.repeat();
+        }
+      });
+    }
+  }
+
+  void _initializeSchools() {
+    const int schoolCount = 4; // Número de cardumes
+    _schoolControllers = [];
+    _schoolAnimations = [];
+
+    final List<String> schoolEmojis = ['🐟', '🐠', '🐡'];
+
+    for (int i = 0; i < schoolCount; i++) {
+      // Controlador de animação para cada cardume
+      final controller = AnimationController(
+        duration: Duration(
+          milliseconds: 15000 +
+              _random.nextInt(10000), // 15-25 segundos (mais lento)
+        ),
+        vsync: this,
+      );
+
+      // Direção do cardume
+      final bool leftToRight = _random.nextBool();
+      final animation = Tween<double>(
+        begin: leftToRight ? -0.15 : 1.15, // Começa mais longe
+        end: leftToRight ? 1.15 : -0.15, // Termina mais longe
+      ).animate(CurvedAnimation(
+        parent: controller,
+        curve: Curves.linear,
+      ));
+
+      _schoolControllers.add(controller);
+      _schoolAnimations.add(animation);
+
+      // Criar peixes do cardume
+      List<FishInSchool> fishesInSchool = [];
+      final int fishInSchoolCount = 8 +
+          _random.nextInt(7); // 8-14 peixes por cardume
+      final String schoolEmoji = schoolEmojis[_random.nextInt(
+          schoolEmojis.length)];
+
+      for (int j = 0; j < fishInSchoolCount; j++) {
+        fishesInSchool.add(FishInSchool(
+          offsetX: (_random.nextDouble() - 0.5) * 120,
+          // Dispersão horizontal
+          offsetY: (_random.nextDouble() - 0.5) * 40,
+          // Dispersão vertical
+          size: 0.8 + _random.nextDouble() * 0.4,
+          // Tamanho variável
+          opacity: 0.6 + _random.nextDouble() * 0.3,
+          // Opacidade variável
+          phase: _random.nextDouble() * 2 * pi, // Fase da ondulação
+        ));
+      }
+
+      // Dados do cardume
+      final school = SchoolOfFish(
+        fishes: fishesInSchool,
+        baseY: 0.2 + _random.nextDouble() * 0.6,
+        // Posição Y base do cardume
+        leftToRight: leftToRight,
+        emoji: schoolEmoji,
+        speed: 0.8 + _random.nextDouble() * 0.4,
+        // Velocidade do cardume
+        delay: _random.nextInt(20000), // Delay inicial
+      );
+
+      _schoolsList.add(school);
+
+      // Iniciar animação com delay
+      Future.delayed(Duration(milliseconds: school.delay), () {
+        if (mounted) {
+          controller.repeat();
+        }
+      });
+    }
+  }
+
+  void _initializeOceanBubbles() {
+    const int bubbleCount = 35; // Número de bolhas oceânicas - AUMENTADO de 15 para 25
+    _bubbleControllers = [];
+    _bubbleAnimations = [];
+
+    for (int i = 0; i < bubbleCount; i++) {
+      // Controlador de animação para cada bolha
+      final controller = AnimationController(
+        duration: Duration(
+          milliseconds: 8000 + _random.nextInt(12000), // 8-20 segundos
+        ),
+        vsync: this,
+      );
+
+      // Animação de movimento vertical (de baixo para cima)
+      final animation = Tween<double>(
+        begin: 1.05, // Começa no fundo
+        end: -0.05, // Termina no topo
+      ).animate(CurvedAnimation(
+        parent: controller,
+        curve: Curves.easeInOut, // Movimento mais natural
+      ));
+
+      _bubbleControllers.add(controller);
+      _bubbleAnimations.add(animation);
+
+      // Dados da bolha oceânica
+      final bubble = OceanBubble(
+        x: _random.nextDouble(),
+        // Posição X aleatória
+        size: 0.3 + _random.nextDouble() * 0.7,
+        // Tamanho variável
+        opacity: 0.2 + _random.nextDouble() * 0.4,
+        // Opacidade variável
+        speed: 0.5 + _random.nextDouble() * 1.0,
+        // Velocidade variável
+        delay: _random.nextInt(15000),
+        // Delay inicial
+        horizontalDrift: (_random.nextDouble() - 0.5) *
+            0.15, // Deriva horizontal
+      );
+
+      _oceanBubblesList.add(bubble);
+
+      // Iniciar animação com delay
+      Future.delayed(Duration(milliseconds: bubble.delay), () {
+        if (mounted) {
+          controller.repeat();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    for (final controller in _fishControllers) {
+      controller.dispose();
+    }
+    for (final controller in _schoolControllers) {
+      controller.dispose();
+    }
+    for (final controller in _bubbleControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF1565C0), // Azul oceano superficie
+            Color(0xFF0D47A1), // Azul oceano médio
+            Color(0xFF0A2472), // Azul oceano profundo
+            Color(0xFF051E3E), // Azul oceano muito profundo
+            Color(0xFF02152B), // Azul oceano abissal
+          ],
+          stops: [0.0, 0.25, 0.55, 0.8, 1.0],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Efeito de raios de luz do sol penetrando na água
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _OceanLightRaysPainter(),
+            ),
+          ),
+
+          // Águas-vivas flutuando
+          ...List.generate(_jellyfishList.length, (index) {
+            return AnimatedBuilder(
+              animation: _animations[index],
+              builder: (context, child) {
+                final jellyfish = _jellyfishList[index];
+                final screenHeight = MediaQuery
+                    .of(context)
+                    .size
+                    .height;
+                final screenWidth = MediaQuery
+                    .of(context)
+                    .size
+                    .width;
+
+                // Posição Y animada
+                final y = _animations[index].value * screenHeight;
+
+                // Posição X com deriva horizontal sutil
+                final driftOffset = sin(_controllers[index].value * 2 * pi) *
+                    jellyfish.horizontalDrift * screenWidth;
+                final x = jellyfish.x * screenWidth + driftOffset;
+
+                // Efeito de pulsação sutil
+                final pulseScale = 1.0 +
+                    sin(_controllers[index].value * 4 * pi) * 0.1;
+
+                return Positioned(
+                  left: x - 15, // Centralizar o emoji
+                  top: y - 15,
+                  child: Transform.scale(
+                    scale: jellyfish.size * pulseScale,
+                    child: Opacity(
+                      opacity: jellyfish.opacity,
+                      child: Text(
+                        '🪼',
+                        style: TextStyle(
+                          fontSize: 30,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 8,
+                              color: Colors.cyan.withOpacity(0.3),
+                              offset: Offset(0, 0),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          }),
+
+          // Peixes nadando horizontalmente
+          ...List.generate(_fishList.length, (index) {
+            return AnimatedBuilder(
+              animation: _fishAnimations[index],
+              builder: (context, child) {
+                final fish = _fishList[index];
+                final screenHeight = MediaQuery
+                    .of(context)
+                    .size
+                    .height;
+                final screenWidth = MediaQuery
+                    .of(context)
+                    .size
+                    .width;
+
+                // Posição X animada
+                final x = _fishAnimations[index].value * screenWidth;
+
+                // Posição Y com flutuação vertical sutil
+                final floatOffset = sin(
+                    _fishControllers[index].value * 3 * pi) *
+                    fish.verticalFloat * screenHeight;
+                final y = fish.y * screenHeight + floatOffset;
+
+                // Efeito de ondulação sutil
+                final waveScale = 1.0 +
+                    sin(_fishControllers[index].value * 6 * pi) * 0.05;
+
+                // CORREÇÃO: Inverter a lógica para peixe nadar na direção do movimento
+                return Positioned(
+                  left: x - 15,
+                  top: y - 15,
+                  child: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.diagonal3Values(
+                        fish.leftToRight ? -fish.size * waveScale : fish.size *
+                            waveScale,
+                        fish.size * waveScale,
+                        1.0),
+                    child: Opacity(
+                      opacity: fish.opacity,
+                      child: Text(
+                        fish.emoji,
+                        style: TextStyle(
+                          fontSize: 25,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 6,
+                              color: Colors.blue.withOpacity(0.2),
+                              offset: Offset(0, 0),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          }),
+
+          // Cardumes de peixes
+          ...List.generate(_schoolsList.length, (index) {
+            return AnimatedBuilder(
+              animation: _schoolAnimations[index],
+              builder: (context, child) {
+                final school = _schoolsList[index];
+                final screenHeight = MediaQuery
+                    .of(context)
+                    .size
+                    .height;
+                final screenWidth = MediaQuery
+                    .of(context)
+                    .size
+                    .width;
+
+                // Posição X base do cardume
+                final baseX = _schoolAnimations[index].value * screenWidth;
+                final baseY = school.baseY * screenHeight;
+
+                // Renderizar cada peixe do cardume
+                return Stack(
+                  children: school.fishes.map((fishInSchool) {
+                    // Movimento ondulatório do cardume
+                    final time = _schoolControllers[index].value * 2 * pi;
+                    final waveX = sin(time + fishInSchool.phase) * 15;
+                    final waveY = cos(time * 0.7 + fishInSchool.phase) * 8;
+
+                    final fishX = baseX + fishInSchool.offsetX + waveX;
+                    final fishY = baseY + fishInSchool.offsetY + waveY;
+
+                    return Positioned(
+                      left: fishX - 12,
+                      top: fishY - 12,
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.diagonal3Values(
+                          // CORREÇÃO: Inverter a lógica para cardumes nadarem na direção correta
+                          school.leftToRight ? -fishInSchool.size : fishInSchool
+                              .size,
+                          fishInSchool.size,
+                          1.0,
+                        ),
+                        child: Opacity(
+                          opacity: fishInSchool.opacity,
+                          child: Text(
+                            school.emoji,
+                            style: TextStyle(
+                              fontSize: 22,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 4,
+                                  color: Colors.blue.withOpacity(0.3),
+                                  offset: Offset(0, 0),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            );
+          }),
+
+          // Bolhas oceânicas subindo
+          ...List.generate(_oceanBubblesList.length, (index) {
+            return AnimatedBuilder(
+              animation: _bubbleAnimations[index],
+              builder: (context, child) {
+                final bubble = _oceanBubblesList[index];
+                final screenHeight = MediaQuery
+                    .of(context)
+                    .size
+                    .height;
+                final screenWidth = MediaQuery
+                    .of(context)
+                    .size
+                    .width;
+
+                // Posição Y animada (de baixo para cima)
+                final y = _bubbleAnimations[index].value * screenHeight;
+
+                // Deriva horizontal com ondulação
+                final time = _bubbleControllers[index].value * 2 * pi;
+                final driftOffset = sin(time * 0.8) * bubble.horizontalDrift *
+                    screenWidth;
+                final x = bubble.x * screenWidth + driftOffset;
+
+                // Efeito de pulsação da bolha
+                final pulseScale = 1.0 + sin(time * 3) * 0.2;
+
+                return Positioned(
+                  left: x - (bubble.size * 8),
+                  top: y - (bubble.size * 8),
+                  child: Transform.scale(
+                    scale: bubble.size * pulseScale,
+                    child: Opacity(
+                      opacity: bubble.opacity,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.6),
+                            width: 1.5,
+                          ),
+                          gradient: RadialGradient(
+                            colors: [
+                              Colors.white.withOpacity(0.2),
+                              Colors.cyan.withOpacity(0.1),
+                              Colors.transparent,
+                            ],
+                            stops: [0.0, 0.7, 1.0],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.cyan.withOpacity(0.3),
+                              blurRadius: 4,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          }),
+
+          // Fundo do oceano com algas marinhas animadas
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildOceanFloor(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOceanFloor() {
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Color(0xFF0D1B2A).withOpacity(0.3), // Areia oceânica escura
+            Color(0xFF1B263B).withOpacity(0.6), // Areia oceânica
+            Color(0xFF2D3748), // Areia oceânica sólida
+          ],
+          stops: [0.0, 0.3, 0.7, 1.0],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Partículas de areia flutuando
+          ...List.generate(15, (index) {
+            final double x = _random.nextDouble() * MediaQuery
+                .of(context)
+                .size
+                .width;
+            final double y = _random.nextDouble() * 60;
+
+            return Positioned(
+              left: x,
+              bottom: y,
+              child: AnimatedBuilder(
+                animation: _controllers.isNotEmpty ? _controllers[index %
+                    _controllers.length] : AnimationController(vsync: this),
+                builder: (context, child) {
+                  final double drift = sin(DateTime
+                      .now()
+                      .millisecondsSinceEpoch / 3000 + index) * 10;
+                  final double opacity = 0.1 + sin(DateTime
+                      .now()
+                      .millisecondsSinceEpoch / 2000 + index) * 0.1;
+
+                  return Transform.translate(
+                    offset: Offset(drift, 0),
+                    child: Container(
+                      width: 2,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey.shade300.withOpacity(opacity),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.1),
+                            blurRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+}
+
+// Classe para pintar raios de luz solar penetrando no oceano
+class _OceanLightRaysPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double width = size.width;
+    final double height = size.height;
+    final int rayCount = 16;
+    final double time = DateTime
+        .now()
+        .millisecondsSinceEpoch / 900.0;
+
+    for (int i = 0; i < rayCount; i++) {
+      // Ângulo dos raios
+      final double angle = -0.3 + (i / rayCount) * 0.6 +
+          0.07 * sin(time * 0.6 + i); // direção com variação
+      final double x0 = width / 2;
+      final double y0 = height * 0.01;
+      final double x1 =
+          x0 + width * (0.47 + 0.14 * sin(i + time * 0.13)) * sin(angle);
+      final double y1 =
+          y0 + height * (0.60 + 0.12 * cos(i + time * 0.21)) * cos(angle);
+
+      final double baseOpacity = 0.05 +
+          0.10 * (0.5 + 0.5 * sin(time * 0.2 + i)); // animação leve
+      Paint paint = Paint()
+        ..color = Colors.white.withOpacity(baseOpacity)
+        ..strokeWidth = 11.0 + 6.0 * sin(time * 0.17 + i)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
+
+      canvas.drawLine(Offset(x0, y0), Offset(x1, y1), paint);
+    }
+
+    // Fade na base para misturar raios
+    final Rect fadeRect =
+    Rect.fromLTWH(0, height * 0.54, width, height * 0.46);
+    final Paint fadePaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.white.withOpacity(0.026),
+          Colors.white.withOpacity(0.0)
+        ],
+      ).createShader(fadeRect);
+    canvas.drawRect(fadeRect, fadePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// Classe para dados de cada água-viva
+class JellyfishData {
+  final double x;
+  final double size;
+  final double opacity;
+  final double horizontalDrift;
+  final int delay;
+
+  JellyfishData({
+    required this.x,
+    required this.size,
+    required this.opacity,
+    required this.horizontalDrift,
+    required this.delay,
+  });
 }
 
 class UserBubble {
@@ -1777,10 +2543,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
           children: [
             // Background
             Positioned.fill(
-              child: Image.asset(
-                'assets/gifmaster.gif',
-                fit: BoxFit.cover,
-              ),
+              child: JellyfishBackground(),
             ),
 
             // Top bar com perfil, sino de notificações e busca
