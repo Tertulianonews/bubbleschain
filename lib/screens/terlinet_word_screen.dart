@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:audioplayers/audioplayers.dart';
 import '../services/supabase_service.dart';
+import '../services/balance_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Chip simples usado na intro para destacar elementos temáticos
@@ -1165,6 +1166,9 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   bool showSolBadge = false;
   double solBadgeOpacity = 1.0;
 
+  // Centralized balance service instance
+  final BalanceService _balanceService = BalanceService();
+
   // Mundo do jogo
   double groundY = 420.0;
   double worldLength = 6000.0;
@@ -1440,7 +1444,11 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
   void _loadUserBalance() {
     userId = SupabaseService().getCurrentUserId();
     if (userId.isNotEmpty) {
-      SupabaseService().getBubbleCoinBalance(userId).then((b) {
+      // Check and give welcome bonus if user has zero balance
+      _balanceService.checkAndGiveWelcomeBonus(userId);
+
+      // Load current balance
+      _balanceService.getBubbleCoinBalance(userId).then((b) {
         if (mounted) setState(() {
           balance = b;
           lastSolTriggerBalance = b;
@@ -2109,11 +2117,17 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
 
   void _updateBalance() {
     double added = 0.00000001;
-    balance += added;
-
-    // Atualizar no Supabase
+    // Atualizar saldo centralizado
     if (userId.isNotEmpty) {
-      SupabaseService().addBubbleCoin(userId, added);
+      _balanceService.updateBubbleCoinBalance(userId, added).then((_) {
+        return _balanceService.getBubbleCoinBalance(userId);
+      }).then((b) {
+        if (mounted) setState(() {
+          balance = b;
+        });
+      });
+    } else {
+      balance += added;
     }
 
     // Verificar bonus

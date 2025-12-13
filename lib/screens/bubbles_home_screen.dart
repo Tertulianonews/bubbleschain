@@ -14,11 +14,13 @@ import 'bubble_game_screen.dart';
 import 'package:http/http.dart' as http;
 import 'terlinet_word_screen.dart';
 import 'channels_screen.dart';
+import 'sky_doge_game_screen.dart';
 import '../widgets/live_video_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'terms_privacy_screen.dart';
 import '../widgets/pepe_logo.dart';
 import '../services/supabase_service.dart'; // Adicionando o import do SupabaseService
+import 'exchange_screen.dart'; // Importar a tela de Exchange
 
 // Modelo para notificação
 class NotificationItem {
@@ -2012,6 +2014,40 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
             ),
           );
 
+          // Adiciona a bolha EXCHANGE (nova bolha dourada)
+          bubbles.add(
+            UserBubble(
+              id: 'exchange_bubble',
+              name: 'EXCHANGE',
+              avatarUrl: '',
+              x: 0.81,
+              y: 0.95,
+              dx: 0,
+              dy: 0,
+              size: 60,
+              color: Color(0xFFFFD700), // Cor dourada para Exchange
+              isSocial: true,
+            ),
+          );
+
+          // Adiciona a bolha SkyDoge
+          bubbles.add(
+            UserBubble(
+              id: 'skydoge_bubble',
+              // Emoji de cachorro diretamente desenhado no centro da bolha (exibição FULL em vez de texto pequeno)
+              name: '',
+              // Não usaremos texto, mas sim o emoji no próprio painter
+              avatarUrl: '',
+              x: 0.19,
+              y: 0.87,
+              dx: 0,
+              dy: 0,
+              size: 65,
+              color: Colors.amberAccent,
+              isSocial: true,
+            ),
+          );
+
           print("[DEBUG] Bolhas carregadas. Total: ${bubbles.length}");
         });
       }
@@ -2225,6 +2261,28 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
 
   void _onBubbleTap(UserBubble user) async {
     print("[DEBUG] _onBubbleTap chamado para: ${user.name} (ID: ${user.id})");
+    // Abrir tela de Exchange se for exchange_bubble
+    if (user.id == 'exchange_bubble') {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExchangeScreen(userId: currentUserId),
+        ),
+      );
+      return;
+    }
+
+    // Abrir SkyDogeGame se for skydoge_bubble
+    if (user.id == 'skydoge_bubble') {
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SkyDogeGameScreen()),
+      );
+      return;
+    }
+
     // Abrir tela de canais se for canais_bubble
     if (user.id == 'canais_bubble') {
       if (!mounted) return;
@@ -2739,7 +2797,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                   (isSearching && loggedIn ? kSearchBarHeight : 0.0),
               child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final specialIds = ['game_bubble', 'canais_bubble'];
+                    final specialIds = ['game_bubble', 'canais_bubble', 'exchange_bubble'];
                     final previews = bubbles
                         .where((b) => specialIds.contains(b.id))
                         .map((bubble) {
@@ -2832,6 +2890,43 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                       );
                     }).toList();
 
+                    // Adicionar emoji para Exchange
+                    final exchangeEmojiList = bubbles
+                        .where((b) => b.id == 'exchange_bubble')
+                        .map((bubble) {
+                      final double baseSize = 60.0;
+                      final double drawSize = baseSize * 1.18;
+                      final double centerX = bubble.x * constraints.maxWidth;
+                      final double centerY = bubble.y * constraints.maxHeight;
+
+                      return Positioned(
+                        left: centerX - 30,
+                        top: centerY - drawSize / 2 - 45,
+                        child: Container(
+                          width: 60,
+                          alignment: Alignment.center,
+                          child: Text(
+                            "💰",
+                            style: TextStyle(
+                              fontSize: 32,
+                              shadows: [
+                                Shadow(
+                                    blurRadius: 8,
+                                    color: Colors.black,
+                                    offset: Offset(2, 2)
+                                ),
+                                Shadow(
+                                    blurRadius: 15,
+                                    color: Color(0xFFFFD700).withOpacity(0.7),
+                                    offset: Offset(0, 0)
+                                )
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList();
+
                     Widget bubblesMainLayer = Stack(
                       children: [
                         GestureDetector(
@@ -2853,7 +2948,8 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                   bubble.id == 'bitcoin_bubble' ||
                                   bubble.id == 'canais_bubble' ||
                                   bubble.id == 'tron_bubble' ||
-                                  bubble.id == 'toncoin_bubble';
+                                  bubble.id == 'toncoin_bubble' ||
+                                  bubble.id == 'exchange_bubble';
                               double baseSize = isSpecial ? 60.0 : bubble.size;
 
                               bool isThisTheSearchedBubble = isSearching &&
@@ -2902,6 +2998,14 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                 } else if (bubble.id == 'tron_bubble') {
                                   await launchUrl(
                                       Uri.parse('https://tron.network/'));
+                                } else if (bubble.id == 'exchange_bubble') {
+                                  if (!mounted) return;
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ExchangeScreen(userId: currentUserId),
+                                    ),
+                                  );
                                 } else {
                                   _onBubbleTap(bubble);
                                 }
@@ -2921,6 +3025,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                           ),
                         ),
                         ...canaisTvEmoji,
+                        ...exchangeEmojiList,
                         ...previews,
                         ...livePreviews,
                       ],
@@ -4675,7 +4780,8 @@ class BubblesPainter extends CustomPainter {
           bubble.id == 'bitcoin_bubble' ||
           bubble.id == 'canais_bubble' ||
           bubble.id == 'tron_bubble' ||
-          bubble.id == 'toncoin_bubble';
+          bubble.id == 'toncoin_bubble' ||
+          bubble.id == 'exchange_bubble';
       double baseSize = isSpecial ? 60.0 : bubble.size;
 
       bool isThisTheSearchedBubble = isSearching &&
@@ -4917,7 +5023,8 @@ class BubblesPainter extends CustomPainter {
             bubble.id == 'bitcoin_bubble' ||
             bubble.id == 'canais_bubble' ||
             bubble.id == 'terlinet_word' ||
-            bubble.id == 'toncoin_bubble') {
+            bubble.id == 'toncoin_bubble' ||
+            bubble.id == 'exchange_bubble') {
           final String label = (bubble.id == 'game_bubble')
               ? 'GAME'
               : (bubble.id == 'bitcoin_bubble')
@@ -4926,6 +5033,8 @@ class BubblesPainter extends CustomPainter {
               ? 'CANAIS'
               : (bubble.id == 'toncoin_bubble')
               ? '💎'
+              : (bubble.id == 'exchange_bubble')
+              ? 'EXCHANGE'
               : 'TerlineT Word';
           final double fontSize = (bubble.id == 'game_bubble')
               ? drawSize * 0.31
@@ -4935,6 +5044,8 @@ class BubblesPainter extends CustomPainter {
               ? drawSize * 0.22
               : (bubble.id == 'toncoin_bubble')
               ? drawSize * 0.41
+              : (bubble.id == 'exchange_bubble')
+              ? drawSize * 0.20
               : drawSize * 0.27;
           final double letterSpacing = (bubble.id == 'game_bubble')
               ? 3.1
@@ -4948,7 +5059,16 @@ class BubblesPainter extends CustomPainter {
                 fontSize: fontSize,
                 color: Colors.white.withOpacity(opacity),
                 letterSpacing: letterSpacing,
-                shadows: bubble.id == 'canais_bubble' ? [
+                shadows: bubble.id == 'exchange_bubble' ? [
+                  Shadow(
+                    blurRadius: 10,
+                    color: Color(0xFFFFD700).withOpacity(opacity),
+                  ),
+                  Shadow(
+                    blurRadius: 20,
+                    color: Color(0xFFFFA500).withOpacity(opacity),
+                  ),
+                ] : bubble.id == 'canais_bubble' ? [
                   Shadow(
                     blurRadius: 10,
                     color: Colors.limeAccent.withOpacity(opacity),
@@ -5239,9 +5359,64 @@ class BubblesPainter extends CustomPainter {
           //     Offset(left + drawSize / 2, top + drawSize / 2), drawSize / 2,
           //     borderPaint);
         }
+      } else if (bubble.id == 'skydoge_bubble') {
+        // Tratamento especial para SkyDoge (🐶): emoji maior e label "SkyDoge 🚀" centralizado acima
+
+        // 1. Escrever "SkyDoge 🚀" centralizado acima da bolha
+        const labelText = 'SkyDoge 🚀';
+        final labelPainter = TextPainter(
+          text: TextSpan(
+            text: labelText,
+            style: TextStyle(
+              fontSize: drawSize * 0.25,
+              // proporcional ao tamanho da bolha
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 1,
+              shadows: [
+                Shadow(
+                    blurRadius: 6, color: Colors.black, offset: Offset(0, 1)),
+                Shadow(blurRadius: 12,
+                    color: Colors.amberAccent,
+                    offset: Offset(0, 0)),
+              ],
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        labelPainter.layout();
+        final labelX = left + (drawSize - labelPainter.width) / 2;
+        final labelY = top - labelPainter.height -
+            (drawSize * 0.3); // Espaço aumentado entre label e cabeça
+        labelPainter.paint(canvas, Offset(labelX, labelY));
+
+        // 2. Emoji grande (maior que antes), centralizado
+        final TextPainter emojiPainter = TextPainter(
+          text: const TextSpan(
+            text: '🐶',
+            style: TextStyle(
+              fontSize: 62, // Maior destaque
+              fontWeight: FontWeight.bold,
+              shadows: [
+                Shadow(
+                    blurRadius: 13,
+                    color: Colors.black38,
+                    offset: Offset(0, 2)),
+                Shadow(
+                    blurRadius: 24, color: Colors.amber, offset: Offset(0, 0))
+              ],
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        emojiPainter.layout();
+        final double emojiX = left + (drawSize - emojiPainter.width) / 2;
+        final double emojiY = top + (drawSize - emojiPainter.height) / 2;
+        emojiPainter.paint(canvas, Offset(emojiX, emojiY));
       } else if (bubble.id != 'game_bubble' && bubble.id != 'terlinet_word' &&
           bubble.id != 'bitcoin_bubble' && bubble.id != 'canais_bubble' &&
-          bubble.id != 'tron_bubble' && bubble.id != 'toncoin_bubble') {
+          bubble.id != 'tron_bubble' && bubble.id != 'toncoin_bubble' &&
+          bubble.id != 'exchange_bubble') {
         final textPainter = TextPainter(
           text: TextSpan(
             text: bubble.name.isNotEmpty ? bubble.name[0].toUpperCase() : '',
@@ -5264,7 +5439,8 @@ class BubblesPainter extends CustomPainter {
           bubble.id != 'bitcoin_bubble' &&
           bubble.id != 'canais_bubble' &&
           bubble.id != 'tron_bubble' &&
-          bubble.id != 'toncoin_bubble') {
+          bubble.id != 'toncoin_bubble' &&
+          bubble.id != 'exchange_bubble') {
         final highlightPaint = Paint()
           ..color = Colors.redAccent.withOpacity(0.9 * opacity)
           ..style = PaintingStyle.stroke

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import '../services/supabase_service.dart';
+import '../services/balance_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class BubbleGameScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
     with TickerProviderStateMixin {
   double balance = 0.0;
   final SupabaseService _supabaseService = SupabaseService();
+  final BalanceService _balanceService = BalanceService();
   String userId = '';
   bool loading = true;
   final Random random = Random();
@@ -78,7 +80,11 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
   void _loadUserIdAndBalance() async {
     final currentUser = SupabaseService().getCurrentUserId();
     if (currentUser.isNotEmpty) {
-      final bal = await _supabaseService.getBubbleCoinBalance(currentUser);
+      // Check and give welcome bonus if user has zero balance
+      await _balanceService.checkAndGiveWelcomeBonus(currentUser);
+
+      // Load current balance
+      final bal = await _balanceService.getBubbleCoinBalance(currentUser);
       setState(() {
         userId = currentUser;
         balance = bal;
@@ -157,7 +163,7 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
         });
       });
       if (userId.isNotEmpty) {
-        await _supabaseService.addBubbleCoin(userId, 0.000000025);
+        await _balanceService.updateBubbleCoinBalance(userId, 0.000000025);
       }
     } else {
       playPopSound();
@@ -186,7 +192,7 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
         balance += added;
       });
       if (userId.isNotEmpty) {
-        await _supabaseService.addBubbleCoin(userId, added);
+        await _balanceService.updateBubbleCoinBalance(userId, added);
       }
       // Solana, etc
       if ((balance / solTriggerThreshold).floor() >
@@ -278,7 +284,7 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
           animateGain = false;
         }));
     if (userId.isNotEmpty) {
-      await _supabaseService.addBubbleCoin(userId, 0.000000100);
+      await _balanceService.updateBubbleCoinBalance(userId, 0.000000100);
     }
   }
 

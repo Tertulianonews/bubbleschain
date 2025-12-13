@@ -1,10 +1,12 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:audioplayers/audioplayers.dart'; // Adicionado para player de áudio
 import 'create_channel_screen.dart';
 import 'channel_view_screen_backup.dart';
 import '../widgets/live_video_widget.dart';
+import 'exchange_screen.dart';
+import 'skydoge_blockchain_screen.dart'; // Import adicionado para Skydoge Blockchain
 
 class Channel {
   final String id;
@@ -71,6 +73,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
   late TabController _tabController;
 
+  // Player de áudio para debug/teste
+  final AudioPlayer _shootPlayer = AudioPlayer();
+
   // Filtros
   bool showOnlyLive = false;
   bool showOnlySubscribed = false;
@@ -84,6 +89,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
     final user = Supabase.instance.client.auth.currentUser;
     currentUserId = user?.id ?? '';
+
+    // Teste: tocar som assim que iniciar tela
+    _shootPlayer.play(AssetSource('assets/assets/short1.mp3'));
 
     _loadChannels();
 
@@ -204,6 +212,33 @@ class _ChannelsScreenState extends State<ChannelsScreen>
   }
 
   void _openChannelView(Channel channel) {
+    // Verificação e ação para EXCHANGE
+    if (channel.id == 'exchange_bubble') {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExchangeScreen(userId: currentUserId),
+        ),
+      ).then((_) {
+        _loadChannels();
+      });
+      return;
+    }
+
+    // Verificação e ação para SKYDOGE BLOCKCHAIN (usando ID fixo ou nome do canal)
+    if (channel.id == 'a0a0a0a0-b0b0-c0c0-d0d0-e0e0e0e0e0e0' ||
+        channel.name.toLowerCase().contains('skydoge blockchain')) {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const SkyDogeBlockchainScreen(),
+        ),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -244,13 +279,25 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text(
-          'CANAIS',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2.0,
-            fontSize: 18,
-          ),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '💰',
+              style: TextStyle(
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 2),
+            const Text(
+              'CANAIS',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2.0,
+                fontSize: 18,
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
         actions: [
@@ -475,7 +522,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                       left: 12,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(12),

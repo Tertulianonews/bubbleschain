@@ -1,48 +1,28 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'balance_service.dart';
 
 class SupabaseService {
   final _client = Supabase.instance.client;
 
   /// Pega o saldo atual do usuário no campo bubblecoin_balance
   Future<double> getBubbleCoinBalance(String userId) async {
-    final res = await _client
-        .from('userBalances')
-        .select('bubblecoin_balance')
-        .eq('user_id', userId)
-        .maybeSingle();
-    if (res == null || res['bubblecoin_balance'] == null) {
-      return 0.0;
-    }
-    return double.tryParse(res['bubblecoin_balance'].toString()) ?? 0.0;
+    return await BalanceService().getBubbleCoinBalance(userId);
   }
 
   /// Garanta o registro inicial de saldo zero, se não existir
   Future<void> ensureUserBalanceExists(String userId) async {
-    final exists = await _client
-        .from('userBalances')
-        .select('user_id')
-        .eq('user_id', userId)
-        .maybeSingle();
-    if (exists == null) {
-      await _client.from('userBalances').insert({
-        'user_id': userId,
-        'bubblecoin_balance': '0',
-        'updated_at': DateTime.now().toIso8601String()
-      });
-    }
+    await BalanceService().initializeUserBalances(userId);
   }
 
   /// Soma um valor ao saldo do usuário (persistente/online)
   Future<void> addBubbleCoin(String userId, double amount) async {
-    await ensureUserBalanceExists(userId);
-    await _client.rpc('increment_bubblecoin', params: {
-      'uid': userId,
-      'value': amount,
-    });
+    await BalanceService().updateBubbleCoinBalance(userId, amount);
   }
 
-  Future<void> convertBubbleCoin(String userId) async {
-    // TODO: lógica de conversão/sacar moedas
+  /// Convert BubbleCoin to other cryptocurrencies
+  Future<void> convertBubbleCoin(String userId, double amount,
+      String toCoin) async {
+    await BalanceService().syncWithExchange(userId, 'BUBBLE', amount, toCoin);
   }
 
   String getCurrentUserId() {
