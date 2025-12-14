@@ -19,6 +19,7 @@ import '../widgets/live_video_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'terms_privacy_screen.dart';
 import '../widgets/pepe_logo.dart';
+import '../widgets/terline_t_bubble.dart';
 import '../services/supabase_service.dart'; // Adicionando o import do SupabaseService
 import 'exchange_screen.dart'; // Importar a tela de Exchange
 
@@ -3111,6 +3112,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                 padding: EdgeInsets.symmetric(horizontal: 8),
                                 child: Column(
                                   children: [
+                                    TerlineTParticlesDisplay(size: 120),
                                     ShaderMask(
                                       shaderCallback: (rect) =>
                                           LinearGradient(

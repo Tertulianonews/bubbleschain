@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'register_screen.dart'; // Import the RegisterScreen
 import 'profile_setup_screen.dart'; // Import the ProfileSetupScreen
 import 'terms_privacy_screen.dart'; // IMPORT NECESSÁRIO
+import '../widgets/terline_t_bubble.dart';
 
 import 'dart:math';
 
@@ -261,6 +262,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Bolha futurista interativa TerlineT no topo
+                        TerlineTParticlesDisplay(size: 140),
+                        const SizedBox(height: 18),
                         ShaderMask(
                           shaderCallback: (rect) =>
                               quantumGradient.createShader(rect),
