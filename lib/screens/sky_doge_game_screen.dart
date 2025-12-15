@@ -142,10 +142,10 @@ class _SkyDogeGameScreenState extends State<SkyDogeGameScreen> with TickerProvid
     _musicPlayer.setReleaseMode(ReleaseMode.loop);
     _explosionPlayer.setReleaseMode(ReleaseMode.stop);
     _shootPlayer.setReleaseMode(ReleaseMode.stop);
-    _explosionPlayer.setSourceAsset('assets/assets/explosao1.mp3');
-    _shootPlayer.setSourceAsset('assets/assets/short1.mp3');
+    _explosionPlayer.setSourceAsset('assets/explosao1.mp3');
+    _shootPlayer.setSourceAsset('assets/short1.mp3');
     _musicPlayer.setSourceAsset(
-        'assets/assets/Brian Rian Rehan Survey God - Good Times.mp3');
+        'assets/Brian Rian Rehan Survey God - Good Times.mp3');
     // Só inicia MUSICA na primeira interação (corrige autoplay Web), então pode mover essa linha para após o fechamento do balão de instrução:
     //_musicPlayer.resume();
   }
@@ -246,7 +246,7 @@ class _SkyDogeGameScreenState extends State<SkyDogeGameScreen> with TickerProvid
           showExplosion = true;
           explosionPosition = Offset(rocketX, rocketY);
           _explosionPlayer.play(
-              AssetSource('assets/assets/explosao1.mp3'), volume: 0.7);
+              AssetSource('assets/explosao1.mp3'), volume: 0.7);
           Future.delayed(const Duration(milliseconds: 500), () {
             if (!mounted) return;
             setState(() {
@@ -260,7 +260,7 @@ class _SkyDogeGameScreenState extends State<SkyDogeGameScreen> with TickerProvid
           showExplosion = true;
           explosionPosition = Offset(rocketX, rocketY);
           _explosionPlayer.play(
-              AssetSource('assets/assets/explosao1.mp3'), volume: 0.7);
+              AssetSource('assets/explosao1.mp3'), volume: 0.7);
         }
       }
     }
@@ -275,7 +275,7 @@ class _SkyDogeGameScreenState extends State<SkyDogeGameScreen> with TickerProvid
 
   void _fire() {
     if (!isPlaying) return;
-    _shootPlayer.play(AssetSource('assets/assets/short1.mp3'), volume: 0.41);
+    _shootPlayer.play(AssetSource('assets/short1.mp3'), volume: 0.41);
     // Adiciona projétil começando no topo do foguete
     projectiles.add(Projectile(x: rocketX, y: rocketY - 0.07));
     setState(() {});

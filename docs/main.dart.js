@@ -56857,7 +56857,7 @@ Mq(){this.H(new A.aMh(this))},
 Ke(){var s=0,r=A.u(t.H),q=this
 var $async$Ke=A.p(function(a,b){if(a===1)return A.q(b,r)
 while(true)switch(s){case 0:s=2
-return A.l(q.Q.hM(0,new A.hA("bubble_pop.mp3"),0.6),$async$Ke)
+return A.l(q.Q.hM(0,new A.hA("assets/bubble_pop.mp3"),0.6),$async$Ke)
 case 2:return A.r(null,r)}})
 return A.t($async$Ke,r)},
 ti(a,b){return this.axD(a,b)},
@@ -56867,7 +56867,7 @@ while(true)switch(s){case 0:k=B.b.kj(q.y,new A.aMp(a),new A.aMq())
 q.H(new A.aMr(q,a))
 s=k.f!=null?2:4
 break
-case 2:p=q.x.p9()?"grito.mp3":"grito2.mp3"
+case 2:p=q.x.p9()?"assets/grito.mp3":"assets/grito2.mp3"
 s=5
 return A.l(q.as.hM(0,new A.hA(p),0.85),$async$ti)
 case 5:q.H(new A.aMs(q))
@@ -60781,7 +60781,7 @@ s=s.geN().c
 r=s==null?null:s.r
 s=r==null?null:r.a
 q.f=s==null?"":s
-q.x.aQn(0,new A.hA("assets/assets/short1.mp3"))
+q.x.aQn(0,new A.hA("assets/short1.mp3"))
 q.ng()
 q.r=A.lQ(B.l9,new A.aPP(q))},
 m(){var s=this,r=s.w
@@ -62335,9 +62335,9 @@ p.k3=q
 s.n2(B.rM)
 r.n2(B.i1)
 q.n2(B.i1)
-r.kD("assets/assets/explosao1.mp3")
-q.kD("assets/assets/short1.mp3")
-s.kD("assets/assets/Brian Rian Rehan Survey God - Good Times.mp3")},
+r.kD("assets/explosao1.mp3")
+q.kD("assets/short1.mp3")
+s.kD("assets/Brian Rian Rehan Survey God - Good Times.mp3")},
 wh(){var s=0,r=A.u(t.H),q,p=this,o,n
 var $async$wh=A.p(function(a,b){if(a===1)return A.q(b,r)
 while(true)switch(s){case 0:n=p.as
@@ -62367,7 +62367,7 @@ s=r==null?null:r.a
 q.as=s==null?"":s
 q.w=A.lQ(B.a_O,q.gaDE())
 q.wh()},
-aDF(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=this,e="assets/assets/explosao1.mp3"
+aDF(a){var s,r,q,p,o,n,m,l,k,j,i,h,g,f=this,e="assets/explosao1.mp3"
 if(!f.z)return
 s=f.dx
 r=f.db
@@ -62420,7 +62420,7 @@ a_i(){var s,r=this
 if(!r.z)return
 s=r.k3
 s===$&&A.b()
-s.hM(0,new A.hA("assets/assets/short1.mp3"),0.41)
+s.hM(0,new A.hA("assets/short1.mp3"),0.41)
 s=r.d
 s===$&&A.b()
 r.ch.push(new A.tS(s,r.e-0.07))
@@ -63136,7 +63136,7 @@ q.n2(B.i1)
 p=n.e6
 p.rC(B.mA)
 p.n2(B.i1)
-s.kD("grito2.mp3")
+s.kD("assets/grito2.mp3")
 r.kD("assets/coletando.mp3")
 q.kD("assets/abelha.mp3")
 p.kD("assets/risada.mp3")
@@ -63412,7 +63412,7 @@ k=m+28
 if(a6.kt(new A.J(n,m,n+28,k))){if(a5<=m+(k-m)*0.45)continue
 s=a0.e6
 s.cG(0)
-s.hM(0,new A.hA(a1),0.9)
+s.hM(0,new A.hA("risada.mp3"),0.9)
 a0.pY()
 break}}if(!a0.p4){s=a0.x2
 s===$&&A.b()
@@ -63953,7 +63953,7 @@ r.p4=!0
 s=r.ai
 s===$&&A.b()
 s.l1(0,0)
-r.c4.hM(0,new A.hA("grito2.mp3"),0.9)},
+r.c4.hM(0,new A.hA("assets/grito2.mp3"),0.9)},
 $S:0}
 A.b0M.prototype={
 $0(){var s,r,q,p=this.a

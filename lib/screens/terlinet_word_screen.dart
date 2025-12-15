@@ -1432,7 +1432,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     _laughPlayer.setPlayerMode(PlayerMode.lowLatency);
     _laughPlayer.setReleaseMode(ReleaseMode.stop);
 
-    _sfxPlayer.setSourceAsset('grito2.mp3');
+    _sfxPlayer.setSourceAsset('assets/grito2.mp3');
     _coinPlayer.setSourceAsset('assets/coletando.mp3');
     _beePlayer.setSourceAsset('assets/abelha.mp3');
     _laughPlayer.setSourceAsset('assets/risada.mp3');
@@ -1959,7 +1959,8 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
             score += 150;
             // som ao matar inimigo
             _beePlayer.stop();
-            _beePlayer.play(AssetSource('assets/abelha.mp3'), volume: 0.9);
+            _beePlayer.play(
+                AssetSource('assets/abelha.mp3'), volume: 0.9);
           }
         }
       }
@@ -2007,7 +2008,8 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
           }
           // risada quando inimigo mata o personagem
           _laughPlayer.stop();
-          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _laughPlayer.play(
+              AssetSource('risada.mp3'), volume: 0.9);
           _gameOver();
           break;
         }
@@ -2019,7 +2021,8 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
       for (final car in _cars) {
         if (playerRect.overlaps(car.rect)) {
           _laughPlayer.stop();
-          _laughPlayer.play(AssetSource('assets/risada.mp3'), volume: 0.9);
+          _laughPlayer.play(
+              AssetSource('assets/risada.mp3'), volume: 0.9);
           _gameOver();
           break;
         }
@@ -2301,7 +2304,7 @@ class _TerlineTWordScreenState extends State<TerlineTWordScreen>
     setState(() {
       isGameOver = true;
       _cameraShakeController.forward(from: 0.0);
-      _sfxPlayer.play(AssetSource('grito2.mp3'), volume: 0.9);
+      _sfxPlayer.play(AssetSource('assets/grito2.mp3'), volume: 0.9);
     });
   }
 

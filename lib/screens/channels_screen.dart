@@ -91,7 +91,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     currentUserId = user?.id ?? '';
 
     // Teste: tocar som assim que iniciar tela
-    _shootPlayer.play(AssetSource('assets/assets/short1.mp3'));
+    _shootPlayer.play(AssetSource('assets/short1.mp3'));
 
     _loadChannels();
 

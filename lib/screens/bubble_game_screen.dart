@@ -134,7 +134,7 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
   }
 
   void playPopSound() async {
-    await _audioPlayer.play(AssetSource('bubble_pop.mp3'), volume: 0.6);
+    await _audioPlayer.play(AssetSource('assets/bubble_pop.mp3'), volume: 0.6);
   }
 
   void _onBubblePop(int id, {TapDownDetails? tapDetails}) async {
@@ -145,7 +145,9 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
     });
     if (bubble.emoji != null) {
       // Emoji Bubble bonus!
-      final picked = random.nextBool() ? 'grito.mp3' : 'grito2.mp3';
+      final picked = random.nextBool()
+          ? 'assets/grito.mp3'
+          : 'assets/grito2.mp3';
       await _emojiPlayer.play(AssetSource(picked), volume: 0.85);
       setState(() {
         balance += 0.000000025;
@@ -240,7 +242,8 @@ class _BubbleGameScreenState extends State<BubbleGameScreen>
       solanaExplosionPos = _lastSolanaCenterPos;
       showSolanaExplosion = true;
     });
-    await _solanaPlayer.play(AssetSource('assets/plimplim.mp3'), volume: 0.92);
+    await _solanaPlayer.play(
+        AssetSource('assets/plimplim.mp3'), volume: 0.92);
     // --- Mega shake
     for (int i = 0; i < 8; i++) {
       Future.delayed(Duration(milliseconds: i * 44), () {
