@@ -3113,6 +3113,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                 child: Column(
                                   children: [
                                     TerlineTParticlesDisplay(size: 120),
+                                    SizedBox(height: 80), // Espaçamento para descer os textos
                                     ShaderMask(
                                       shaderCallback: (rect) =>
                                           LinearGradient(
@@ -3123,7 +3124,7 @@ class _BubblesHomeScreenState extends State<BubblesHomeScreen>
                                             ],
                                           ).createShader(rect),
                                       child: Text(
-                                        "Bem-vindo ao Bubbles!",
+                                        "Bubbles!",
                                         style: GoogleFonts.orbitron(
                                           fontWeight: FontWeight.w900,
                                           fontSize: 21,

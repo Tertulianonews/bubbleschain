@@ -48,7 +48,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Para enviar imagens nas conversas.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Para tirar fotos e enviar no chat.</string>
+	<string>Usamos sua câmera para tirar fotos no chat e criar experiências interativas com a bolha TerlineT</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Para gravar áudios e enviar no chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
